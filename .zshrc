@@ -13,8 +13,13 @@ fi
 
 if [[ $(uname -n) == WIL* ]];then
     IS_WORK=true
+    COMPUTER_LOGO=÷
 elif [[ $(uname -n) == VDT-SURFACE ]];then
     IS_HOME=true
+    COMPUTER_LOGO=❖
+elif [[ $(uname -n) == VDT-PI ]];then
+    IS_PI=true
+    COMPUTER_LOGO=π
 else
     echo $0 unknown computer $(uname -n)
     exit 1
@@ -176,6 +181,8 @@ alias sl='subl ' #sublime
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
 alias catmd='mdcat '
+alias sz='source ${HOME}/.zshrc'
+alias ez='subl ${HOME}/.zshrc' #edit emacs
 
 take() {
     mkdir ${1} && cd ${1}
@@ -207,24 +214,15 @@ else
 fi
 
 if [ "$IS_WORK" = true ] ; then
-    alias handycommands='mdcat ~/handy_commands.md'
-    export GITHUB_OAUTH_TOKEN=$(cat ~/.ssh/github-pull-repos-token)
+    alias handycommands='mdcat ${HOME}/handy_commands.md'
+    export GITHUB_OAUTH_TOKEN=$(cat ${HOME}/.ssh/github-pull-repos-token)
 fi
 
 
-[[ $0 = *zsh ]] && [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-[[ $0 = bash ]] && [ -f ~/.fzf.bash ] && source ~/.fzf.bash
+[[ $0 = *zsh ]] && [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
+[[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
 
 SAVEHIST=10000000
-
-
-########################################################################
-# PYENV
-########################################################################
-
-# export PATH="/Users/vincent.deltoral/.pyenv/bin:$PATH"
-# eval "$(pyenv init -)"
-# eval "$(pyenv virtualenv-init -)"
 
 ########################################################################
 # EMACS
@@ -243,8 +241,8 @@ ero() { # emacs read only
     ${emacs_selected_version} "${@}" --eval '(setq buffer-read-only t)'
 }
 alias emr="find . -name '#*#' -o -name '*~' | xargs rm -f" # remove emacs backup files in current directory and subdirectories
-alias ez='emacs ~/.zshrc'
-alias sz='source ~/.zshrc'
+
+
 
 export EDITOR='emacs -nw '
 
@@ -267,29 +265,15 @@ check_last_exit_code() {
 setopt prompt_subst
 RPROMPT='$(check_last_exit_code)'
 
-# if [ "$IS_WORK" = true ]; then
-#     # Context: user@hostname (who am I and where am I)
-#     prompt_context() {
-#       if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
-#         prompt_segment blue default "💻"
-#       fi
-#     }
+if [ -n "$COMPUTER_LOGO" ]; then
+  # Context: user@hostname (who am I and where am I)
+  prompt_context() {
+    if [[ "$USER" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
+      prompt_segment black default $COMPUTER_LOGO
+    fi
+}
+fi
 
-#     # overrides agnoster.zsh-theme build_prompt function
-#     build_prompt_custom() {
-#       RETVAL=$?
-#       prompt_status
-#       prompt_virtualenv
-#       prompt_aws
-#       prompt_context
-#       prompt_dir
-#       prompt_git
-#       prompt_bzr
-#       prompt_hg
-#       prompt_end
-#     }
-#     PROMPT='%{%f%b%k%}$(build_prompt_custom) '
-# fi
 
 ########################################################################
 # MAN PAGES
@@ -343,11 +327,17 @@ alias gap='git add -p .'
 alias gds='git diff --staged '
 alias grfm='git fetch origin master:master' # update master branch without switching
 
-export GITHUB_OAUTH_TOKEN=$(cat ~/.ssh/github-pull-repos-token)
 
 ########################################################################
 # DOCKER
 ########################################################################
 
-dbash() { docker exec -it ${1} /bin/bash; }
-
+dbash() {
+    # If exact container name matches, exec in
+    # Else use it as container name for docker-compose
+    if [[ $(docker ps -f name=${1} | grep -w ${1}) ]]; then
+        docker exec -it ${1} /bin/bash;
+    else
+        docker-compose exec ${1} /bin/bash;
+    fi
+}
