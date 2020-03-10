@@ -2,4 +2,5 @@
 !.gitignore
 !.zshrc
 !.tmux.conf
-!/bin/
+/bin/
+!/bin/n_* # work specific binaries
