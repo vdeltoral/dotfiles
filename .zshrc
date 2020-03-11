@@ -45,13 +45,51 @@ plugins=(
 
 
 ########################################################################
-# MISC ALIASES AND SHORTCUTS
+# MISC
 ########################################################################
 
-alias sudo='sudo ' #allows sudoing of aliases
-alias ll='ls -laG --color=auto '
-alias lh='ll -d .?* ' # ls only hidden '.' files
+
+###########
+# ALIASES
+###########
+alias agi='ag --ignore test --ignore tests --ignore "*.xml" --ignore "*.html" --ignore "*.log*" '
+alias c='clear '
+alias cl='clear '
+alias empty='echo > '
+alias ez='subl ${HOME}/.zshrc' #edit .zshrc
+alias ff='find . -name ' # find file by name
+alias hg='history | grep ' # searches history
 alias ld='ll | grep "^d" | cut -d ":" -f 2 | cut -c 1-3 --complement | grep -v -e "^\.$" -e "^\.\.$"' # ls directories only
+alias lh='ll -d .?* ' # ls only hidden '.' files
+alias ll='ls -laG --color=auto '
+alias perms='stat -c "%U %a %n" ' # gets octal permissions for
+alias ppath="tr ':' '\n' <<< $PATH" # prints the path variable, each entry on a new line
+alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
+alias s='subl ' #sublime
+alias s='subl ' #sublime
+alias sl='subl ' #sublime
+alias sudo='sudo ' #allows sudoing of aliases
+alias sz='source ${HOME}/.zshrc' #reload .zshrc
+alias t='tree -C ' # quick tree
+alias ti='treei '
+alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc" '
+alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
+alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
+alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
+
+### Machine specific Aliases
+if [ "$IS_MACOS" = true ] ; then
+    alias ll='ls -laG ' # OSX doesn't use ls --color
+    alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
+elif [ "$IS_HOME" = true ] ; then
+    # WSL Linux on home computer
+    alias s='TODO ' #sublime
+    alias wopen='wsl-open ' # npm package to "open" in WSL
+fi
+
+###########
+# FUNCTIONS
+###########
 lt() { # only display N most recently touched files in directory. N and dir are optional, and can be in any order
     re_num='^[0-9]+$'
     search_dir=$(pwd)
@@ -83,27 +121,6 @@ lt() { # only display N most recently touched files in directory. N and dir are 
 
     ll -t ${search_dir} | head -n ${display_count} | grep -v '^total'
 }
-alias ppath="tr ':' '\n' <<< $PATH" # prints the path variable, each entry on a new line
-alias hg='history | grep ' # searches history
-alias perms='stat -c "%U %a %n" ' # gets octal permissions for
-alias t='tree -C ' # quick tree
-alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc" '
-alias ti='treei '
-alias agi='ag --ignore test --ignore tests --ignore "*.xml" --ignore "*.html" --ignore "*.log*" '
-alias empty='echo > '
-alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
-alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
-alias ff='find . -name ' # find file by name
-alias cl='clear '
-alias c='clear '
-alias s='subl ' #sublime
-alias sl='subl ' #sublime
-alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
-alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
-alias sz='source ${HOME}/.zshrc' #reload .zshrc
-alias ez='subl ${HOME}/.zshrc' #edit .zshrc
-alias s='subl ' #sublime
-
 take() {
     mkdir ${1} && cd ${1}
 }
@@ -120,16 +137,6 @@ pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
     fi
 }
 pathadd ${HOME}/bin
-
-
-if [ "$IS_MACOS" = true ] ; then
-    alias ll='ls -laG ' # OSX doesn't use ls --color
-    alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
-elif [ "$IS_HOME" = true ] ; then
-    # WSL Linux on home computer
-    alias s='TODO ' #sublime
-    alias wopen='wsl-open ' # npm package to "open" in WSL
-fi
 
 [[ $0 = *zsh ]] && [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
 [[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
