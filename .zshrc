@@ -137,6 +137,7 @@ pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
     fi
 }
 pathadd ${HOME}/bin
+[ -d "/usr/local/go/bin" ] && pathadd "/usr/local/go/bin" && pathadd ${HOME}/go/bin
 
 [[ $0 = *zsh ]] && [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
 [[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
