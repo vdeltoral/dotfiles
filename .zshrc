@@ -66,7 +66,6 @@ alias perms='stat -c "%U %a %n" ' # gets octal permissions for
 alias ppath="tr ':' '\n' <<< $PATH" # prints the path variable, each entry on a new line
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 alias s='subl ' #sublime
-alias s='subl ' #sublime
 alias sl='subl ' #sublime
 alias sudo='sudo ' #allows sudoing of aliases
 alias sz='source ${HOME}/.zshrc' #reload .zshrc
