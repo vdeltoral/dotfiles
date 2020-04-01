@@ -8,8 +8,16 @@ elif [[ -f "/home/vincent/vincent/Google Drive/api/speed.csv" ]] ; then
 elif [[ -f "/Users/vincent.deltoral/TODO" ]] ; then
     speedfile=""
 fi
+[[ -z "${speedfile}" ]] && exit
 
-if [[ ! -z "${speedfile}" ]] ; then
-    speed=$(tail -n 1 "${speedfile}" | cut -d',' -f 3)
-    [ ! -z "$speed" ] && echo "${speed}Mb/s"
+
+speed=$(tail -n 1 "${speedfile}" | cut -d',' -f 3)
+[[ -z "${speed}" ]] && exit
+
+speed_int=$(echo "${speed}" | cut -d'.' -f 1)
+
+if (( ( $(($speed_int)) < 40 ) )) ; then
+    echo "#[fg=#ff0000] ${speed_int}Mb/s"
+else
+    echo "${speed_int}Mb/s"
 fi
