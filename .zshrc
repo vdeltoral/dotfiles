@@ -39,6 +39,7 @@ plugins=(
     git
     ssh-agent
     web-search
+    emoji
 )
 
 [[ $0 = *zsh ]] && source ${ZSH}/oh-my-zsh.sh
@@ -56,7 +57,6 @@ alias agi='ag --ignore test --ignore tests --ignore "*.xml" --ignore "*.html" --
 alias c='clear '
 alias cl='clear '
 alias empty='echo > '
-alias ez='subl ${HOME}/.zshrc' #edit .zshrc
 alias ff='find . -name ' # find file by name
 alias hg='history | grep ' # searches history
 alias ld='ll | grep "^d" | cut -d ":" -f 2 | cut -c 1-3 --complement | grep -v -e "^\.$" -e "^\.\.$"' # ls directories only
@@ -65,8 +65,6 @@ alias ll='ls -laG --color=auto '
 alias perms='stat -c "%U %a %n" ' # gets octal permissions for
 alias ppath="tr ':' '\n' <<< $PATH" # prints the path variable, each entry on a new line
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
-alias s='subl ' #sublime
-alias sl='subl ' #sublime
 alias sudo='sudo ' #allows sudoing of aliases
 alias sz='source ${HOME}/.zshrc' #reload .zshrc
 alias t='tree -C ' # quick tree
@@ -75,14 +73,21 @@ alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc"
 alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
 alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
+# Text editor shortcuts (sublime on mac, emacs elsewhere)
+alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
+alias s='emacs '
+alias sl='emacs '
+
 
 ### Machine specific Aliases
 if [ "$IS_MACOS" = true ] ; then
     alias ll='ls -laG ' # OSX doesn't use ls --color
     alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
+    alias s='subl ' #sublime
+    alias sl='subl ' #sublime
+    alias ez='subl ${HOME}/.zshrc' #edit .zshrc
 elif [ "$IS_HOME" = true ] ; then
     # WSL Linux on home computer
-    alias s='TODO ' #sublime
     alias wopen='wsl-open ' # npm package to "open" in WSL
 fi
 

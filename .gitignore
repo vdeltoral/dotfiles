@@ -1,6 +1,6 @@
 /*
 !.gitignore
 !.zshrc
-!.tmux.conf
+!.tmux*
 /bin/
 !/bin/n_* # work specific binaries
