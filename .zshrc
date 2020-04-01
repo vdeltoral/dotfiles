@@ -138,11 +138,13 @@ empty_and_tail() {
 
 pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
     if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
-        PATH="${PATH:+"$PATH:"}$1"
+        export PATH="${PATH:+"$PATH:"}$1"
     fi
 }
 pathadd ${HOME}/bin
-[ -d "/usr/local/go/bin" ] && pathadd "/usr/local/go/bin" && pathadd ${HOME}/go/bin
+
+[ -d "/usr/local/go/bin" ] && pathadd "/usr/local/go/bin"
+[ -d "${HOME}/go/bin" ] && pathadd "${HOME}/go/bin"
 
 [[ $0 = *zsh ]] && [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
 [[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
