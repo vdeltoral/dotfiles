@@ -63,7 +63,6 @@ alias ld='ll | grep "^d" | cut -d ":" -f 2 | cut -c 1-3 --complement | grep -v -
 alias lh='ll -d .?* ' # ls only hidden '.' files
 alias ll='ls -laG --color=auto '
 alias perms='stat -c "%U %a %n" ' # gets octal permissions for
-alias ppath="tr ':' '\n' <<< $PATH" # prints the path variable, each entry on a new line
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 alias sudo='sudo ' #allows sudoing of aliases
 alias sz='source ${HOME}/.zshrc' #reload .zshrc
@@ -136,9 +135,12 @@ empty_and_tail() {
     empty ${1} && clear && tail -f ${1}
 }
 
+ppath() { # prints the path variable, each entry on a new line
+    tr ':' '\n' <<< ${PATH}
+}
 pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
     if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
-        export PATH="${PATH:+"$PATH:"}$1"
+        PATH="${PATH:+"$PATH:"}$1"
     fi
 }
 pathadd ${HOME}/bin
