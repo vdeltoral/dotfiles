@@ -77,6 +77,7 @@ alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
 alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
 alias s='emacs '
 alias sl='emacs '
+[ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
 
 ### Machine specific Aliases
