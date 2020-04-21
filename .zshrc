@@ -219,21 +219,6 @@ export LESS_TERMCAP_us=$'\e[1;4;31m'
 # TMUX
 ########################################################################
 
-tmuxrs() {
-    [ ! -z ${TMUX} ] && echo "Cannot restart tmux from within in a tmux session." && return
-
-    tmux kill-server
-    sleep 0.1
-    tmux new -d -s "PRIMARY"
-    tmux new-window
-    tmux new-window
-    tmux next-window # go to first window
-    tmux new -d -s "SECONDARY"
-    tmux new-window
-    tmux new-window
-    tmux next-window # go to first window
-    tmux ls
-}
 alias tma='tmux attach -t PRIMARY '
 alias tmb='tmux attach -t SECONDARY '
 alias tmuxrsa='tmuxrs && tma '

@@ -2,5 +2,7 @@
 !.gitignore
 !.zshrc
 !.tmux*
-/bin/
-!/bin/n_* # work specific binaries
+# include bin scripts
+!/bin/
+# ignore work specific bin scripts
+/bin/n_*
