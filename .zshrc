@@ -73,6 +73,7 @@ alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in 
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
 alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
 alias servers='less ${HOME}/.ssh/config | grep -i "^\ *Hostname" | rev  | cut -d" " -f 1 | rev | sort | uniq' # list servers located in .ssh/config
+alias foldersize='du -sh '
 # Text editor shortcuts (sublime on mac, emacs elsewhere)
 alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
 alias s='emacs '
