@@ -72,10 +72,9 @@ alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc"
 alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
 alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
-# Text editor shortcuts (sublime on mac, emacs elsewhere)
-alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
-alias s='emacs '
-alias sl='emacs '
+alias ez='subl ${HOME}/.zshrc' #edit .zshrc
+alias s='subl '
+alias sl='subl '
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
 
@@ -83,12 +82,13 @@ alias sl='emacs '
 if [ "$IS_MACOS" = true ] ; then
     alias ll='ls -laG ' # OSX doesn't use ls --color
     alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
-    alias s='subl ' #sublime
-    alias sl='subl ' #sublime
-    alias ez='subl ${HOME}/.zshrc' #edit .zshrc
+    export DISPLAY='localhost:0'
 elif [ "$IS_HOME" = true ] ; then
     # WSL Linux on home computer
     alias wopen='wsl-open ' # npm package to "open" in WSL
+    export DISPLAY='localhost:0'
+elif [ "$IS_PI" = true ] ; then
+    alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
 fi
 
 ###########
@@ -171,7 +171,7 @@ ero() { # emacs read only
 }
 alias emr="find . -name '#*#' -o -name '*~' | xargs rm -f" # remove emacs backup files in current directory and subdirectories
 
-export EDITOR='emacs -nw '
+export EDITOR='emacs '
 
 ########################################################################
 # PROMPT
