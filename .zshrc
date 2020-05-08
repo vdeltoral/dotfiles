@@ -26,8 +26,7 @@ elif [[ $(uname -n) == VDT-PI-NANO ]];then
     IS_PI=true
     COMPUTER_LOGO=π2
 else
-    echo $0 unknown computer $(uname -n)
-    exit 1
+    echo $fg[red] "$0 unknown computer $(uname -n)"
 fi
 
 ########################################################################
