@@ -6,3 +6,5 @@
 !/bin/
 # ignore work specific bin scripts
 /bin/n_*
+# ignore coding folder
+/code/
