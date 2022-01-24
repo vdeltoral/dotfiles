@@ -65,7 +65,6 @@ alias ld='ll | grep "^d" | cut -d ":" -f 2 | cut -c 1-3 --complement | grep -v -
 alias lh='ll -d .?* ' # ls only hidden '.' files
 alias ll='ls -laG --color=auto '
 alias perms='stat -c "%U %a %n" ' # gets octal permissions for
-alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 alias sudo='sudo ' #allows sudoing of aliases
 alias sz='source ${HOME}/.zshrc' #reload .zshrc
 alias t='tree -C ' # quick tree
@@ -205,6 +204,30 @@ if [ -n "$COMPUTER_LOGO" ]; then
 }
 fi
 
+########################################################################
+# PYTHON
+########################################################################
+
+# https://realpython.com/intro-to-pyenv/
+# pyenv install --list | grep " 3\.[678]"
+# python3 -m virtualenv --python=/Users/vincent.deltoral/.pyenv/versions/3.6.9/bin/python myenv-3.6.9
+
+alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
+
+make_python_env () {
+    if [ $# -eq 0 ]
+      then
+        echo "Supply a python version. e.g. 'make_python_env 3.6.9'"
+        return
+    fi
+    PYENV_DIR=/Users/vincent.deltoral/.pyenv/versions/${1}
+    PYENV_BIN=$PYENV_DIR/bin/python
+    [ ! -d $PYENV_DIR  ] && pyenv install ${1}
+    echo "Creating virtualenv for python version ${1}"
+    python3 -m virtualenv --python=$PYENV_BIN myenv-${1} \
+    && echo "To activate run:" && echo "source ./myenv-${1}/bin/activate"
+}
+
 
 ########################################################################
 # MAN PAGES
@@ -242,6 +265,9 @@ alias ga='git add '
 alias gap='git add -p .'
 alias gds='git diff --staged '
 alias grfm='git fetch origin master:master' # update master branch without switching
+git_touched() {
+    TOUCHED_FILES=$(git status -s | grep '^A\|^\ M' | rev | cut -d' ' -f1 | rev)
+}
 
 
 ########################################################################
@@ -255,5 +281,18 @@ dbash() {
         docker exec -it ${1} /bin/bash;
     else
         docker-compose exec ${1} /bin/bash;
+    fi
+}
+
+docker_nuke() {
+    # Deletes all
+    if read -q "choice?PRESS 'Y/y' TO DELETE ALL docker CONTNAINERS AND IMAGES!!! : "; then
+        echo
+        docker stop $(docker ps -a -q)
+        docker rm $(docker ps -a -q)
+        docker volume prune -f
+    else
+        echo
+        echo "'$choice' not 'Y' or 'y'. Exiting..."
     fi
 }
