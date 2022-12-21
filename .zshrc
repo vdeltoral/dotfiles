@@ -19,10 +19,10 @@ if [[ $(uname -n) == WIL* ]];then
 elif [[ $(uname -n) == VDT-SURFACE ]];then
     IS_HOME=true
     COMPUTER_LOGO=❖
-elif [[ $(uname -n) == VDT-PI ]];then
+elif [[ $(uname -n) == PI-GP ]];then
     IS_PI=true
     COMPUTER_LOGO=π
-elif [[ $(uname -n) == VDT-PI-NANO ]];then
+elif [[ $(uname -n) == PI-NELSON ]];then
     IS_PI=true
     COMPUTER_LOGO=π2
 else
@@ -174,7 +174,7 @@ ero() { # emacs read only
 }
 alias emr="find . -name '#*#' -o -name '*~' | xargs rm -f" # remove emacs backup files in current directory and subdirectories
 
-export EDITOR='emacs '
+export EDITOR='nano '
 
 ########################################################################
 # PROMPT
