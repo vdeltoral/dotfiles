@@ -4,7 +4,7 @@
 !.tmux*
 # include bin scripts
 !/bin/
-# ignore work specific bin scripts
-/bin/n_*
+# ignore pycache folder
+/bin/__pycache__/
 # ignore coding folder
 /code/
