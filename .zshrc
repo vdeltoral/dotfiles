@@ -13,12 +13,8 @@ else
 fi
 
 
-if [[ $(uname -n) == WIL* ]];then
-    IS_WORK=true
-    source ${HOME}/.zshrc_work
-elif [[ $(uname -n) == VDT-SURFACE ]];then
-    IS_HOME=true
-    COMPUTER_LOGO=❖
+if [[ $(uname -n) == VDT-AIR ]];then
+    COMPUTER_LOGO=
 elif [[ $(uname -n) == PI-GP ]];then
     IS_PI=true
     COMPUTER_LOGO=π
@@ -143,10 +139,11 @@ ppath() { # prints the path variable, each entry on a new line
 }
 pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
     if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
-        PATH="${PATH:+"$PATH:"}$1"
+        PATH="$1:${PATH:+"$PATH"}"
     fi
 }
 pathadd ${HOME}/bin
+pathadd /opt/homebrew/bin
 
 [ -d "/usr/local/go/bin" ] && pathadd "/usr/local/go/bin"
 [ -d "${HOME}/go/bin" ] && pathadd "${HOME}/go/bin"

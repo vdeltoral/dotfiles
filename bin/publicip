@@ -1,16 +1,1 @@
-#!/usr/bin/env python3
-
-import sys
-import requests
-
-try:
-    resp = requests.get("https://icanhazip.com")
-except Exception:
-    sys.exit(1)
-
-if resp.status_code != 200:
-    sys.exit(1)
-
-with open("/home/pi/publicip", "w") as f:
-    f.write(resp.content.decode("utf-8"))
-
+publicip.py
