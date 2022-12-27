@@ -82,10 +82,6 @@ if [ "$IS_MACOS" = true ] ; then
     alias ll='ls -laG ' # OSX doesn't use ls --color
     alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
     export DISPLAY='localhost:0'
-elif [ "$IS_HOME" = true ] ; then
-    # WSL Linux on home computer
-    alias wopen='wsl-open ' # npm package to "open" in WSL
-    export DISPLAY='localhost:0'
 elif [ "$IS_PI" = true ] ; then
     alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
 fi
@@ -207,7 +203,15 @@ fi
 
 # https://realpython.com/intro-to-pyenv/
 # pyenv install --list | grep " 3\.[678]"
-# python3 -m virtualenv --python=/Users/vincent.deltoral/.pyenv/versions/3.6.9/bin/python myenv-3.6.9
+# python3 -m virtualenv --python=/Users/vincent/.pyenv/versions/3.6.9/bin/python myenv-3.6.9
+
+
+### Machine specific paths
+if [ "$IS_MACOS" = true ] ; then
+    pathadd "/Users/vincent/Library/Python/3.9/bin"
+elif [ "$IS_PI" = true ] ; then
+    pathadd "/home/pi/.local/bin"
+fi
 
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 
@@ -217,7 +221,7 @@ make_python_env () {
         echo "Supply a python version. e.g. 'make_python_env 3.6.9'"
         return
     fi
-    PYENV_DIR=/Users/vincent.deltoral/.pyenv/versions/${1}
+    PYENV_DIR=/Users/vincent/.pyenv/versions/${1}
     PYENV_BIN=$PYENV_DIR/bin/python
     [ ! -d $PYENV_DIR  ] && pyenv install ${1}
     echo "Creating virtualenv for python version ${1}"
