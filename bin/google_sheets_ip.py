@@ -26,6 +26,14 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SHEET_ID = "1yLnnszwu0fiC-x2ki2m_BZwekRcloTrG6qHLOnfv4pk"
 
 
+def get_mac_addr():
+    return ":".join(
+        ["{:02x}".format((uuid.getnode() >> ele) & 0xFF) for ele in range(0, 8 * 6, 8)][
+            ::-1
+        ]
+    )
+
+
 def get_token_filepath():
     return os.path.join(os.path.expanduser("~"), ".google-sheets-token.json")
 
@@ -34,13 +42,18 @@ def get_creds_filepath():
     return os.path.join(os.path.expanduser("~"), ".google-sheets-credentials.json")
 
 
-def get_sheet_range():
-    hostname = socket.gethostname()
-    if "AIR" in hostname:
-        row_num = 2
-    else:
-        row_num = 3
+def find_row_num_using_mac_addr():
+    mac = get_mac_addr()
+    mac_addrs = [x[0] if x else x for x in get_sheet_values("IPs!B1:B100")]
+    if mac in mac_addrs:
+        return str(mac_addrs.index(mac) + 1)
+    if [] in mac_addrs:
+        return str(mac_addrs.index([]) + 1)
+    return str(len(mac_addrs) + 1)
 
+
+def get_sheet_range_for_mac_addr():
+    row_num = find_row_num_using_mac_addr()
     return f"IPs!A{row_num}:E{row_num}"
 
 
@@ -67,11 +80,11 @@ def get_creds():
     return creds
 
 
-def get_sheet_values():
+def get_sheet_values(sheet_range=None):
     """Shows basic usage of the Sheets API.
     Prints values from a sample spreadsheet.
     """
-    sheet_range = "IPs!A1:E1"
+    sheet_range = sheet_range or "IPs!A1:E1"
 
     creds = get_creds()
 
@@ -83,20 +96,14 @@ def get_sheet_values():
         result = sheet.values().get(spreadsheetId=SHEET_ID, range=sheet_range).execute()
         values = result.get("values", [])
 
-        if not values:
-            print("No data found.")
-            return
+        return values
 
-        for row in values:
-            print(row)
     except HttpError as err:
         print(err)
 
 
-def update_sheet_values(row_values):
+def update_sheet_values(row_values, sheet_range):
     creds = get_creds()
-
-    sheet_range = get_sheet_range()
 
     try:
 
@@ -122,20 +129,15 @@ def update_sheet_values(row_values):
 
 def prepare_row():
     hostname = socket.gethostname()
-    mac_addr = ":".join(
-        ["{:02x}".format((uuid.getnode() >> ele) & 0xFF) for ele in range(0, 8 * 6, 8)][
-            ::-1
-        ]
-    )
+    mac_addr = get_mac_addr()
     public_ip = get_public_ip()
     local_ip = get_local_ip()
     curr_time = str(datetime.now())
-    row = (hostname, mac_addr, public_ip, local_ip, curr_time)
-    # print(row)
-    return row
+    return (hostname, mac_addr, public_ip, local_ip, curr_time)
 
 
 if __name__ == "__main__":
     get_sheet_values()
     row_values = prepare_row()
-    update_sheet_values(row_values)
+    sheet_range = get_sheet_range_for_mac_addr()
+    update_sheet_values(row_values, sheet_range)
