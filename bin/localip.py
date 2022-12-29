@@ -7,9 +7,9 @@ import subprocess
 
 def get_local_ip():
     if system() == "Linux":
-        command = ["hostname", "-I"]
+        command = ["/usr/bin/hostname", "-I"]
     else:
-        command = ["ipconfig", "getifaddr", "en0"]
+        command = ["/usr/sbin/ipconfig", "getifaddr", "en0"]
 
     result = subprocess.run(command, stdout=subprocess.PIPE)
     return result.stdout.decode("utf-8").strip()
