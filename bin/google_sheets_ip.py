@@ -1,12 +1,12 @@
 # https://developers.google.com/sheets/api/quickstart/python
 
-from __future__ import print_function
-
 import socket
 import os.path
 import uuid
 import sys
 from datetime import datetime
+
+import netifaces
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -27,6 +27,10 @@ SHEET_ID = "1yLnnszwu0fiC-x2ki2m_BZwekRcloTrG6qHLOnfv4pk"
 
 
 def get_mac_addr():
+    for interface in ("wlan0", "en0"):
+        if interface in netifaces.interfaces():
+            return netifaces.ifaddresses(interface)[netifaces.AF_LINK][0]["addr"]
+
     return ":".join(
         ["{:02x}".format((uuid.getnode() >> ele) & 0xFF) for ele in range(0, 8 * 6, 8)][
             ::-1
