@@ -70,8 +70,6 @@ alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in 
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
 alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
 alias foldersize='du -sh '
-# Text editor shortcuts (sublime on mac, emacs elsewhere)
-alias ez='subl ${HOME}/.zshrc' #edit .zshrc
 alias s='subl '
 alias sl='subl '
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
@@ -82,8 +80,6 @@ if [ "$IS_MACOS" = true ] ; then
     alias ll='ls -laG ' # OSX doesn't use ls --color
     alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
     export DISPLAY='localhost:0'
-elif [ "$IS_PI" = true ] ; then
-    alias ez='emacs ${HOME}/.zshrc' #edit .zshrc
 fi
 
 ###########
@@ -148,25 +144,6 @@ pathadd /opt/homebrew/bin
 [[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
 
 SAVEHIST=10000000
-
-########################################################################
-# EMACS
-########################################################################
-
-emacs_selected_version='/usr/local/bin/emacs'
-emacs_window() {
-    #DISPLAY=localhost:16.0 ${emacs_selected_version} ${1} &
-    ${emacs_selected_version} ${1} &
-}
-alias emacsw=emacs_window ${1}
-alias ew=emacs_window ${1}
-alias emacs='${emacs_selected_version} -nw '
-alias e='emacs '
-ero() { # emacs read only
-    ${emacs_selected_version} "${@}" --eval '(setq buffer-read-only t)'
-}
-alias emr="find . -name '#*#' -o -name '*~' | xargs rm -f" # remove emacs backup files in current directory and subdirectories
-
 export EDITOR='nano '
 
 ########################################################################
