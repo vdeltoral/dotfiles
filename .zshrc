@@ -33,12 +33,7 @@ export ZSH="${HOME}/.oh-my-zsh"
 
 ZSH_THEME="agnoster"
 
-plugins=(
-    git
-    ssh-agent
-    web-search
-    emoji
-)
+plugins=(git ssh-agent)
 
 [[ $0 = *zsh ]] && source ${ZSH}/oh-my-zsh.sh
 
