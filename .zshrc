@@ -13,7 +13,7 @@ else
 fi
 
 
-if [[ $(uname -n) == VDT-AIR ]];then
+if [[ $(uname -n) == VDT-MBP ]];then
     COMPUTER_LOGO=
 elif [[ $(uname -n) == PI-GP ]];then
     IS_PI=true
@@ -69,9 +69,11 @@ alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc"
 alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
 alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
+alias youtube-dl-audio='youtube-dl -x --audio-format mp3 --no-overwrites --output "%(title)s.%(ext)s" '
 alias foldersize='du -sh '
 alias s='subl '
 alias sl='subl '
+alias ip='ip -c=auto ' # colorizes ip
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
 
