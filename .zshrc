@@ -13,7 +13,7 @@ else
 fi
 
 
-if [[ $(uname -n) == VDT-MBP ]];then
+if [[ $(uname -n) == VDT-* ]];then
     COMPUTER_LOGO=
 elif [[ $(uname -n) == PI-GP ]];then
     IS_PI=true
