@@ -133,6 +133,7 @@ pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
 }
 pathadd ${HOME}/bin
 pathadd /opt/homebrew/bin
+pathadd ${HOME}/.local/bin
 
 [ -d "/usr/local/go/bin" ] && pathadd "/usr/local/go/bin"
 [ -d "${HOME}/go/bin" ] && pathadd "${HOME}/go/bin"
