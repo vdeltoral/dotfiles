@@ -295,3 +295,7 @@ docker_nuke() {
         echo "'$choice' not 'Y' or 'y'. Exiting..."
     fi
 }
+
+if [ -f ~/.zshrc_personal ]; then
+    source ~/.zshrc_personal
+fi
