@@ -63,13 +63,26 @@ alias ti='treei '
 alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc" '
 alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
-alias youtube-dl='youtube-dl --no-overwrites --output "%(title)s.%(ext)s" '
-alias youtube-dl-audio='youtube-dl -x --audio-format mp3 --no-overwrites --output "%(title)s.%(ext)s" '
+alias yt-mp4='yt-dlp --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s" -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b" '
+alias yt-mp4-720='yt-mp4 -f "bestvideo[height<=720]+bestaudio/best[height<=720]" --output "~/Downloads/%(title)s.%(ext)s" '
+alias yt-mp4-1080='yt-mp4 -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --output "~/Downloads/%(title)s.%(ext)s" '
+alias yt='yt-dlp --cookies-from-browser firefox -x --audio-format mp3 --no-overwrites --output "~/Downloads/%(title)s.%(ext)s" '
+#alias yt-mp3='yt-dlp --cookies-from-browser firefox -x --audio-format mp3 --no-overwrites --output "%(title)s.%(ext)s" '
+alias yt-mp3='yt-dlp --cookies-from-browser firefox -x --audio-format mp3 --no-overwrites --output "~/Downloads/%(title)s.%(ext)s" '
+alias mp3='yt-mp3 '
+alias igreel='yt-dlp --cookies-from-browser firefox --no-overwrites -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"'
 alias foldersize='du -sh '
-alias s='subl '
-alias sl='subl '
+alias s='cot '
+alias sl='cot '
+alias cz='cot ~/.zshrc '
+alias dl='cd ~/Downloads '
+alias dlo='open ~/Downloads '
 alias ip='ip -c=auto ' # colorizes ip
+[ -d "/Users/vincent/Library/Application Support/Blackmagic Design/DaVinci Resolve/" ] && alias resolve='open "/Users/vincent/Library/Application Support/Blackmagic Design/DaVinci Resolve/"'
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
+
+# disables TLDR updating almost every time it's run
+export TLDR_AUTO_UPDATE_DISABLED='true'
 
 
 ### Machine specific Aliases
@@ -126,16 +139,28 @@ empty_and_tail() {
 ppath() { # prints the path variable, each entry on a new line
     tr ':' '\n' <<< ${PATH}
 }
-pathadd() { # adds a dir to $PATH if it exists and is not already in $PATH
+pathprepend() { # Prepends a dir to $PATH if it exists and is not already in $PATH
     if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
         PATH="$1:${PATH:+"$PATH"}"
     fi
 }
-pathadd ${HOME}/bin
-pathadd /opt/homebrew/bin
+pathappend() { # Appends a dir to $PATH if it exists and is not already in $PATH
+    if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
+        PATH="${PATH:+"$PATH:"}$1"
+    fi
+}
+pathremove() { # Removes a dir from $PATH if it exists
+    if [[ ":$PATH:" == *":$1:"* ]]; then
+        PATH=$(echo "$PATH" | sed -e "s#:$1##" -e 's#^:##' -e 's#:*$##')
+    fi
+}
 
-[ -d "/usr/local/go/bin" ] && pathadd "/usr/local/go/bin"
-[ -d "${HOME}/go/bin" ] && pathadd "${HOME}/go/bin"
+pathappend ${HOME}/bin
+pathremove /opt/homebrew/bin && pathprepend /opt/homebrew/bin
+pathappend /opt/homebrew/sbin
+
+[ -d "/usr/local/go/bin" ] && pathappend "/usr/local/go/bin"
+[ -d "${HOME}/go/bin" ] && pathappend "${HOME}/go/bin"
 
 [[ $0 = *zsh ]] && [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
 [[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
@@ -182,9 +207,9 @@ fi
 
 ### Machine specific paths
 if [ "$IS_MACOS" = true ] ; then
-    pathadd "/Users/vincent/Library/Python/3.9/bin"
+    pathappend "/Users/vincent/Library/Python/3.9/bin"
 elif [ "$IS_PI" = true ] ; then
-    pathadd "/home/pi/.local/bin"
+    pathappend "/home/pi/.local/bin"
 fi
 
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
@@ -202,7 +227,6 @@ make_python_env () {
     python3 -m virtualenv --python=$PYENV_BIN myenv-${1} \
     && echo "To activate run:" && echo "source ./myenv-${1}/bin/activate"
 }
-
 
 ########################################################################
 # MAN PAGES
