@@ -35,6 +35,8 @@ ZSH_THEME="agnoster"
 
 plugins=(git ssh-agent)
 
+fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
+
 [[ $0 = *zsh ]] && source ${ZSH}/oh-my-zsh.sh
 
 
@@ -78,7 +80,6 @@ alias cz='cot ~/.zshrc '
 alias dl='cd ~/Downloads '
 alias dlo='open ~/Downloads '
 alias ip='ip -c=auto ' # colorizes ip
-[ -d "/Users/vincent/Library/Application Support/Blackmagic Design/DaVinci Resolve/" ] && alias resolve='open "/Users/vincent/Library/Application Support/Blackmagic Design/DaVinci Resolve/"'
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
 # disables TLDR updating almost every time it's run
@@ -209,7 +210,7 @@ fi
 if [ "$IS_MACOS" = true ] ; then
     pathappend "/Users/vincent/Library/Python/3.9/bin"
 elif [ "$IS_PI" = true ] ; then
-    pathappend "/home/pi/.local/bin"
+    pathappend "/home/pi/.pyenv/bin"
 fi
 
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
@@ -220,7 +221,7 @@ make_python_env () {
         echo "Supply a python version. e.g. 'make_python_env 3.6.9'"
         return
     fi
-    PYENV_DIR=/Users/vincent/.pyenv/versions/${1}
+    PYENV_DIR=$HOME/.pyenv/versions/${1}
     PYENV_BIN=$PYENV_DIR/bin/python
     [ ! -d $PYENV_DIR  ] && pyenv install ${1}
     echo "Creating virtualenv for python version ${1}"
