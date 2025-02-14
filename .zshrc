@@ -79,7 +79,8 @@ alias sl='cot '
 alias cz='cot ~/.zshrc '
 alias dl='cd ~/Downloads '
 alias dlo='open ~/Downloads '
-alias ip='ip -c=auto ' # colorizes ip
+alias myip='curl -s https://api64.ipify.org; echo'
+alias myip-local='ip -4 addr show | awk "/inet / {print \$2}" | cut -d/ -f1 | tail -n 1'
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
 # disables TLDR updating almost every time it's run
@@ -143,16 +144,19 @@ ppath() { # prints the path variable, each entry on a new line
 pathprepend() { # Prepends a dir to $PATH if it exists and is not already in $PATH
     if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
         PATH="$1:${PATH:+"$PATH"}"
+        export PATH
     fi
 }
 pathappend() { # Appends a dir to $PATH if it exists and is not already in $PATH
     if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
         PATH="${PATH:+"$PATH:"}$1"
+        export PATH
     fi
 }
 pathremove() { # Removes a dir from $PATH if it exists
     if [[ ":$PATH:" == *":$1:"* ]]; then
         PATH=$(echo "$PATH" | sed -e "s#:$1##" -e 's#^:##' -e 's#:*$##')
+        export PATH
     fi
 }
 
@@ -167,7 +171,7 @@ pathappend /opt/homebrew/sbin
 [[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
 
 SAVEHIST=10000000
-export EDITOR='nano '
+export EDITOR='nano'
 
 ########################################################################
 # PROMPT
@@ -259,7 +263,7 @@ git_current_branch() {
 }
 alias gco='git checkout'
 alias gcb='git checkout -b'
-alias gpsup='[ $(git_current_branch) != "master" ] && git push --set-upstream origin $(git_current_branch) || echo "Use a branch other than master."'
+alias gpsup='[ "$(git_current_branch)" != "main" ] && [ "$(git_current_branch)" != "master" ] && git push --set-upstream origin $(git_current_branch) || echo "Use a branch other than main/master."'
 alias gbr='gco "master" && git branch | grep -v "master" | xargs git branch -D'
 alias ga='git add '
 alias gap='git add -p .'
@@ -296,6 +300,8 @@ docker_nuke() {
         echo "'$choice' not 'Y' or 'y'. Exiting..."
     fi
 }
+
+alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrink'
 
 if [ -f ~/.zshrc_personal ]; then
     source ~/.zshrc_personal
