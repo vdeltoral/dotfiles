@@ -79,7 +79,7 @@ alias sl='cot '
 alias cz='cot ~/.zshrc '
 alias dl='cd ~/Downloads '
 alias dlo='open ~/Downloads '
-alias myip='curl -s https://api64.ipify.org; echo'
+alias myip='curl -4 -s https://api64.ipify.org; echo'
 alias myip-local='ip -4 addr show | awk "/inet / {print \$2}" | cut -d/ -f1 | tail -n 1'
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
