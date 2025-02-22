@@ -233,6 +233,11 @@ make_python_env () {
     && echo "To activate run:" && echo "source ./myenv-${1}/bin/activate"
 }
 
+if [ -d "$HOME/.venv-home" ]; then
+    source $HOME/.venv-home/bin/activate
+fi
+
+
 ########################################################################
 # MAN PAGES
 ########################################################################
@@ -250,9 +255,10 @@ export LESS_TERMCAP_us=$'\e[1;4;31m'
 # TMUX
 ########################################################################
 
-alias tma='tmux attach -t PRIMARY '
-alias tmb='tmux attach -t SECONDARY '
+alias tma='tmux has-session -t PRIMARY 2>/dev/null && tmux attach -t PRIMARY || tmuxrsa'
+alias tmb='tmux has-session -t SECONDARY 2>/dev/null && tmux attach -t SECONDARY || tmuxrsb'
 alias tmuxrsa='tmuxrs && tma '
+alias tmuxrsb='tmuxrs && tmb '
 
 ########################################################################
 # GIT
