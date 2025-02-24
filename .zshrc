@@ -3,27 +3,18 @@
 # GET MACHINE INFO
 ########################################################################
 
-if [[ $OSTYPE == linux* ]];then
-    IS_LINUX=true
-elif [[ $OSTYPE == darwin* ]];then
-    IS_MACOS=true
-else
-    echo $0 unknown os type $OSTYPE
-    exit 1
-fi
+case "$OSTYPE" in
+    darwin*) IS_MACOS=true ;;
+    linux*)  IS_LINUX=true ;;
+    *)       echo "Unknown OS: $OSTYPE" && exit 1 ;;
+esac
 
-
-if [[ $(uname -n) == VDT-* ]];then
-    COMPUTER_LOGO=
-elif [[ $(uname -n) == PI-GP ]];then
-    IS_PI=true
-    COMPUTER_LOGO=π
-elif [[ $(uname -n) == PI-NELSON ]];then
-    IS_PI=true
-    COMPUTER_LOGO=π2
-else
-    echo $fg[red] "$0 unknown computer $(uname -n)"
-fi
+case "$(uname -n)" in
+    VDT-*)   COMPUTER_LOGO="" ;;
+    PI-GP)   IS_PI=true; COMPUTER_LOGO="π" ;;
+    PI-NELSON) IS_PI=true; COMPUTER_LOGO="π2" ;;
+    *)       echo "Unknown computer: $(uname -n)" ;;
+esac
 
 ########################################################################
 # ZSH
@@ -37,7 +28,7 @@ plugins=(git ssh-agent)
 
 fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 
-[[ $0 = *zsh ]] && source ${ZSH}/oh-my-zsh.sh
+source ${ZSH}/oh-my-zsh.sh
 
 
 ########################################################################
@@ -65,68 +56,65 @@ alias ti='treei '
 alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc" '
 alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
-alias yt-mp4='yt-dlp --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s" -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b" '
-alias yt-mp4-720='yt-mp4 -f "bestvideo[height<=720]+bestaudio/best[height<=720]" --output "~/Downloads/%(title)s.%(ext)s" '
-alias yt-mp4-1080='yt-mp4 -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --output "~/Downloads/%(title)s.%(ext)s" '
-alias yt='yt-dlp --cookies-from-browser firefox -x --audio-format mp3 --no-overwrites --output "~/Downloads/%(title)s.%(ext)s" '
-#alias yt-mp3='yt-dlp --cookies-from-browser firefox -x --audio-format mp3 --no-overwrites --output "%(title)s.%(ext)s" '
-alias yt-mp3='yt-dlp --cookies-from-browser firefox -x --audio-format mp3 --no-overwrites --output "~/Downloads/%(title)s.%(ext)s" '
-alias mp3='yt-mp3 '
 alias igreel='yt-dlp --cookies-from-browser firefox --no-overwrites -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"'
 alias foldersize='du -sh '
-alias s='cot '
-alias sl='cot '
-alias cz='cot ~/.zshrc '
+alias s='subl '
+alias sl='subl '
+alias cz='subl ~/.zshrc '
 alias dl='cd ~/Downloads '
 alias dlo='open ~/Downloads '
 alias myip='curl -4 -s https://api64.ipify.org; echo'
 alias myip-local='ip -4 addr show | awk "/inet / {print \$2}" | cut -d/ -f1 | tail -n 1'
-[ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER} '
 
 # disables TLDR updating almost every time it's run
 export TLDR_AUTO_UPDATE_DISABLED='true'
 
+# Cross-platform ls
+if [ "$IS_MACOS" = true ]; then
+    alias ll='ls -laG'
 
-### Machine specific Aliases
-if [ "$IS_MACOS" = true ] ; then
-    alias ll='ls -laG ' # OSX doesn't use ls --color
-    alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
-    export DISPLAY='localhost:0'
+else
+    alias ll='ls -la --color=auto'
 fi
+
+# Machine-specific
+[ "$IS_MACOS" = true ] && alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
+[ "$IS_MACOS" = true ] && export DISPLAY='localhost:0'
+[ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER}'
+
+###########
+# YOUTUBE-DLP
+###########
+
+# Base alias with common options
+alias yt-base='yt-dlp --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s"'
+
+# MP3 extraction (one alias, no duplicates)
+alias yt-mp3='yt-base -x --audio-format mp3'
+alias mp3='yt-mp3'
+
+# MP4 downloads with different quality levels
+alias yt-mp4='yt-base -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b"'
+alias yt-mp4-720='yt-mp4 -f "bestvideo[height<=720]+bestaudio/best[height<=720]"'
+alias yt-mp4-1080='yt-mp4 -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"'
+
+# Instagram reels (matches yt-mp4-1080 behavior)
+alias igreel='yt-base -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"'
 
 ###########
 # FUNCTIONS
 ###########
 lt() { # only display N most recently touched files in directory. N and dir are optional, and can be in any order
-    re_num='^[0-9]+$'
-    search_dir=$(pwd)
-    display_count=11
-
-    # 1 arg, either search_dir or display_count
-    if ! [ -z "${1}" ] && [ -z "${2}" ]
-    then
-        if [[ "${1}" =~ ${re_num} ]]
-        then
-            display_count=$((${1} + 1))
+    local dir="." count=11
+    while [ $# -gt 0 ]; do
+        if [[ "$1" =~ ^[0-9]+$ ]]; then
+            count=$(( $1 + 1 ))
         else
-            search_dir=${1}
+            dir="$1"
         fi
-    fi
-
-    # 2 args, 1 is search_dir, other is display_count
-    if ! [ -z "${1}" ] && ! [ -z "${2}" ]
-    then
-        if [[ "${1}" =~ ${re_num} ]]
-        then
-            display_count=$((${1} + 1))
-            search_dir=${2}
-        else
-            display_count=$((${2} + 1))
-            search_dir=${1}
-        fi
-    fi
-
-    ll -t ${search_dir} | head -n ${display_count} | grep -v '^total'
+        shift
+    done
+    ls -la -t "$dir" | head -n "$count" | grep -v '^total'
 }
 take() {
     mkdir ${1} && cd ${1}
@@ -141,18 +129,10 @@ empty_and_tail() {
 ppath() { # prints the path variable, each entry on a new line
     tr ':' '\n' <<< ${PATH}
 }
-pathprepend() { # Prepends a dir to $PATH if it exists and is not already in $PATH
-    if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
-        PATH="$1:${PATH:+"$PATH"}"
-        export PATH
-    fi
-}
-pathappend() { # Appends a dir to $PATH if it exists and is not already in $PATH
-    if [ -d "$1" ] && [[ ":$PATH:" != *":$1:"* ]]; then
-        PATH="${PATH:+"$PATH:"}$1"
-        export PATH
-    fi
-}
+pathprepend() { [ -d "$1" ] && PATH="$1${PATH:+:$PATH}"; } # Prepends a dir to $PATH if it exists and is not already in $PATH
+pathappend() { [ -d "$1" ] && PATH="${PATH:+${PATH}:}$1"; } # Appends a dir to $PATH if it exists and is not already in $PATH
+typeset -U PATH  # Ensures no duplicates in PATH
+
 pathremove() { # Removes a dir from $PATH if it exists
     if [[ ":$PATH:" == *":$1:"* ]]; then
         PATH=$(echo "$PATH" | sed -e "s#:$1##" -e 's#^:##' -e 's#:*$##')
@@ -168,7 +148,6 @@ pathappend /opt/homebrew/sbin
 [ -d "${HOME}/go/bin" ] && pathappend "${HOME}/go/bin"
 
 [[ $0 = *zsh ]] && [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
-[[ $0 = bash ]] && [ -f ${HOME}/.fzf.bash ] && source ${HOME}/.fzf.bash
 
 SAVEHIST=10000000
 export EDITOR='nano'
@@ -205,33 +184,11 @@ fi
 # PYTHON
 ########################################################################
 
-# https://realpython.com/intro-to-pyenv/
-# pyenv install --list | grep " 3\.[678]"
-# python3 -m virtualenv --python=/Users/vincent/.pyenv/versions/3.6.9/bin/python myenv-3.6.9
-
-
-### Machine specific paths
-if [ "$IS_MACOS" = true ] ; then
-    pathappend "/Users/vincent/Library/Python/3.9/bin"
-elif [ "$IS_PI" = true ] ; then
-    pathappend "/home/pi/.pyenv/bin"
-fi
+[ "$IS_PI" = true ] && pathappend "/home/pi/.pyenv/bin"
 
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 
-make_python_env () {
-    if [ $# -eq 0 ]
-      then
-        echo "Supply a python version. e.g. 'make_python_env 3.6.9'"
-        return
-    fi
-    PYENV_DIR=$HOME/.pyenv/versions/${1}
-    PYENV_BIN=$PYENV_DIR/bin/python
-    [ ! -d $PYENV_DIR  ] && pyenv install ${1}
-    echo "Creating virtualenv for python version ${1}"
-    python3 -m virtualenv --python=$PYENV_BIN myenv-${1} \
-    && echo "To activate run:" && echo "source ./myenv-${1}/bin/activate"
-}
+alias make_python_env='python -m venv .venv'
 
 if [ -d "$HOME/.venv-home" ]; then
     source $HOME/.venv-home/bin/activate
