@@ -60,11 +60,13 @@ alias igreel='yt-dlp --cookies-from-browser firefox --no-overwrites -f "bestvide
 alias foldersize='du -sh '
 alias s='subl '
 alias sl='subl '
-alias cz='subl ~/.zshrc '
+alias ez='subl ~/.zshrc ' # Edit zshrc
 alias dl='cd ~/Downloads '
 alias dlo='open ~/Downloads '
 alias myip='curl -4 -s https://api64.ipify.org; echo'
 alias myip-local='ip -4 addr show | awk "/inet / {print \$2}" | cut -d/ -f1 | tail -n 1'
+alias tldr='command tldr -t base16'
+alias neofetch='fastfetch'
 
 # disables TLDR updating almost every time it's run
 export TLDR_AUTO_UPDATE_DISABLED='true'
@@ -87,7 +89,7 @@ fi
 ###########
 
 # Base alias with common options
-alias yt-base='yt-dlp --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s"'
+alias yt-base='yt-dlp --cookies-from-browser firefox --no-overwrites --output "./%(title)s.%(ext)s"'
 
 # MP3 extraction (one alias, no duplicates)
 alias yt-mp3='yt-base -x --audio-format mp3'
@@ -188,7 +190,8 @@ fi
 
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 
-alias make_python_env='python -m venv .venv'
+alias make_python_env='python -m venv .venv && source .venv/bin/activate'
+alias venv='[[ -f ./.venv/bin/activate ]] && source ./.venv/bin/activate'
 
 if [ -d "$HOME/.venv-home" ]; then
     source $HOME/.venv-home/bin/activate
