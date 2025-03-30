@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 
-from platform import system
 import subprocess
+from platform import system
 
 
 def get_local_ip():

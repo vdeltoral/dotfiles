@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import subprocess
 import os
-import sys
 import re
+import subprocess
+import sys
 
 git_ssh_url = subprocess.run(
     "git config --get remote.origin.url", shell=True, capture_output=True
