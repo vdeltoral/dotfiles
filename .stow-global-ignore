@@ -1,0 +1,6 @@
+\.DS_Store
+run_stow.sh
+.git
+.gitignore
+readme.md
+Brewfile
