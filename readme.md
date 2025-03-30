@@ -1,7 +1,16 @@
-Install dotfiles using the `run_stow.sh`.
+## Installation Instructions
 
-`run_stow.sh` - dry run mode
-`run_stow.sh run` - regular mode
-`run_stow.sh force` - overwrites existing files
+-   Dotfiles:
 
-Install all brews with `brew bundle` from within this directory.
+    ```bash
+    ./run_stow.sh # dry run
+    ./run_stow.sh run # install dotfiles
+    ./run_stow.sh force # install dotfiles with overwrite
+    ```
+
+-   Brews
+
+    ```bash
+    cd dotfiles
+    Brew bundle
+    ```
