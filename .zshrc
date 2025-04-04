@@ -192,9 +192,10 @@ alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name 
 alias make_python_env='python -m venv .venv && source .venv/bin/activate'
 alias venv='[[ -f ./.venv/bin/activate ]] && source ./.venv/bin/activate'
 
-if [ -d "$HOME/.venv-home" ]; then
-    source $HOME/.venv-home/bin/activate
-fi
+
+pathappend $PYENV_ROOT/bin
+eval "$(pyenv init --path)"
+eval "$(pyenv init - zsh)"
 
 
 ########################################################################
@@ -267,6 +268,10 @@ docker_nuke() {
 }
 
 alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrink'
+
+########################################################################
+# OUTSIDE OF VERSION CONTROL
+########################################################################
 
 if [ -f ~/.zshrc_personal ]; then
     source ~/.zshrc_personal
