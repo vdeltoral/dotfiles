@@ -185,11 +185,13 @@ fi
 # PYTHON
 ########################################################################
 
-[ "$IS_PI" = true ] && pathappend "/home/pi/.pyenv/bin"
+# direnv to automatically load & unload virtual environments
+command -v direnv >/dev/null && eval "$(direnv hook zsh)"
+export DIRENV_LOG_FORMAT="" # remove chatter
 
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 
-alias make_python_env='python -m venv .venv && source .venv/bin/activate'
+alias make_python_env='python -m venv .venv && echo "source .venv/bin/activate" > .envrc && direnv allow'
 alias venv='[[ -f ./.venv/bin/activate ]] && source ./.venv/bin/activate'
 
 

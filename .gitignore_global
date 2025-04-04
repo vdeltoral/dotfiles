@@ -1,5 +1,9 @@
-# Created by https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,git,python,flask,node,react
-# Edit at https://www.toptal.com/developers/gitignore?templates=macos,visualstudiocode,git,python,flask,node,react
+# Created by https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,git,python,flask,node,react,direnv
+# Edit at https://www.toptal.com/developers/gitignore?templates=macos,visualstudiocode,git,python,flask,node,react,direnv
+
+### direnv ###
+.direnv
+.envrc
 
 ### Flask ###
 instance/*
@@ -476,4 +480,4 @@ sketch
 .history
 .ionide
 
-# End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,git,python,flask,node,react
+# End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,git,python,flask,node,react,direnv
