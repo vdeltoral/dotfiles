@@ -217,10 +217,38 @@ export LESS_TERMCAP_us=$'\e[1;4;31m'
 # TMUX
 ########################################################################
 
-alias tma='tmux has-session -t PRIMARY 2>/dev/null && tmux attach -t PRIMARY || tmuxrsa'
-alias tmb='tmux has-session -t SECONDARY 2>/dev/null && tmux attach -t SECONDARY || tmuxrsb'
-alias tmuxrsa='tmuxrs && tma '
-alias tmuxrsb='tmuxrs && tmb '
+create_primary_session() {
+    if ! tmux has-session -t PRIMARY 2>/dev/null; then
+        tmux new-session -s PRIMARY -d
+        tmux new-window -t PRIMARY:2
+        tmux new-window -t PRIMARY:3
+        tmux select-window -t PRIMARY:1
+    fi
+}
+
+create_secondary_session() {
+    if ! tmux has-session -t SECONDARY 2>/dev/null; then
+        tmux new-session -s SECONDARY -d
+        tmux new-window -t SECONDARY:2
+        tmux new-window -t SECONDARY:3
+        tmux select-window -t SECONDARY:1
+    fi
+}
+
+create_tmux_sessions() {
+    create_primary_session
+    create_secondary_session
+}
+
+# Run on new shell
+# create_tmux_sessions &
+
+
+alias tmuxrs='tmux kill-server 2>/dev/null; create_tmux_sessions'
+alias tmuxrsa='tmux kill-server 2>/dev/null; create_tmux_sessions; tmux attach-session -t PRIMARY'
+alias tmuxrsb='tmux kill-server 2>/dev/null; create_tmux_sessions; tmux attach-session -t SECONDARY'
+alias tma='create_primary_session; tmux attach-session -t PRIMARY'
+alias tmb='create_secondary_session; tmux attach-session -t SECONDARY'
 
 ########################################################################
 # GIT
