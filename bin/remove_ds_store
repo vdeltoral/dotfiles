@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+read -p "Recursively delete .DS_Store files in $PWD ? (y/N) " confirm
+if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    count=$(find . -name ".DS_Store" -type f | wc -l | awk '{print $1}')
+    find . -name ".DS_Store" -type f -delete
+    echo "Removed $count .DS_Store files"
+else
+    echo "Operation cancelled"
+fi

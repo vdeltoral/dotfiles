@@ -66,6 +66,7 @@ alias dlo='open ~/Downloads '
 alias myip='curl -4 -s https://api64.ipify.org; echo'
 alias myip-local='ip -4 addr show | awk "/inet / {print \$2}" | cut -d/ -f1 | tail -n 1'
 alias neofetch='fastfetch'
+alias list-scripts='ls -1 ~/bin/'
 
 # disables TLDR updating almost every time it's run
 export TLDR_AUTO_UPDATE_DISABLED='true'
@@ -305,4 +306,9 @@ alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrin
 
 if [ -f ~/.zshrc_personal ]; then
     source ~/.zshrc_personal
+fi
+
+
+if command -v tmux &> /dev/null && [ -z "$TMUX" ]; then
+  tma
 fi
