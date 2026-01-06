@@ -1,0 +1,445 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import shutil
+from pathlib import Path
+from datetime import datetime
+from typing import List, Tuple, Dict
+import subprocess
+
+from rich.console import Console
+from rich.prompt import Confirm
+from rich.panel import Panel
+from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+from rich.table import Table
+from rich.layout import Layout
+from rich.live import Live
+from rich.text import Text
+
+console = Console()
+
+# One Dark color theme (Atom)
+COLOR_PURPLE = "#c678dd"
+COLOR_CYAN = "#56b6c2"
+COLOR_GREEN = "#98c379"
+COLOR_YELLOW = "#e5c07b"
+COLOR_ORANGE = "#d19a66"
+COLOR_RED = "#e06c75"
+COLOR_BLUE = "#61afef"
+COLOR_GRAY = "#5c6370"
+COLOR_WHITE = "#abb2bf"
+
+
+class BackupSource:
+    """Represents a backup source directory"""
+    def __init__(self, name: str, source_path: Path):
+        self.name = name
+        self.source_path = source_path
+        self.backups = []  # List of (backup_path, size, date) tuples
+
+
+def find_external_drives() -> List[Path]:
+    """Find all external hard drives (>900GB)"""
+    volumes = Path("/Volumes")
+    if not volumes.exists():
+        return []
+    
+    drives = []
+    for volume in volumes.iterdir():
+        if volume.is_dir() and volume.name != "Macintosh HD":
+            try:
+                stat = os.statvfs(str(volume))
+                size_gb = (stat.f_blocks * stat.f_frsize) / (1024**3)
+                if size_gb >= 900:  # Likely a hard drive
+                    drives.append(volume)
+            except:
+                continue
+    
+    return drives
+
+
+def get_backup_sources() -> List[BackupSource]:
+    """Get Lightroom and DaVinci Resolve backup sources"""
+    sources = []
+    
+    # Lightroom Classic backups
+    lr_path = Path.home() / "Content" / "Lightroom" / "Lightroom Backups"
+    if lr_path.exists():
+        sources.append(BackupSource("Lightroom Classic", lr_path))
+    
+    # DaVinci Resolve backups
+    dr_path = Path.home() / "Content" / "DaVinci Resolve" / "DaVinci Resolve Backups"
+    if dr_path.exists():
+        sources.append(BackupSource("DaVinci Resolve", dr_path))
+    
+    return sources
+
+
+def scan_backups(source: BackupSource):
+    """Scan for backup files/folders in the source"""
+    if not source.source_path.exists():
+        return
+    
+    for item in source.source_path.iterdir():
+        if item.name.startswith('.'):
+            continue
+        
+        # Get size and modification time
+        if item.is_file():
+            size = item.stat().st_size
+            mtime = datetime.fromtimestamp(item.stat().st_mtime)
+            source.backups.append((item, size, mtime))
+        elif item.is_dir():
+            # Calculate directory size
+            size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+            mtime = datetime.fromtimestamp(item.stat().st_mtime)
+            source.backups.append((item, size, mtime))
+    
+    # Sort by modification time (newest first)
+    source.backups.sort(key=lambda x: x[2], reverse=True)
+
+
+def get_existing_backups(drive: Path, source: BackupSource) -> Dict[str, int]:
+    """Get dict of existing backup names and their sizes on the drive"""
+    # Mirror the same path structure from home to the drive
+    # ~/Content/Lightroom/Lightroom Backups -> /Volumes/DRIVE/Content/Lightroom/Lightroom Backups
+    home_content = Path.home() / "Content"
+    relative_path = source.source_path.relative_to(home_content)
+    backup_dir = drive / "Content" / relative_path
+    
+    if not backup_dir.exists():
+        return {}
+    
+    existing = {}
+    for item in backup_dir.iterdir():
+        if not item.name.startswith('.'):
+            # Calculate size
+            if item.is_file():
+                size = item.stat().st_size
+            else:
+                size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+            existing[item.name] = size
+    
+    return existing
+
+
+def find_new_backups(sources: List[BackupSource], drive: Path) -> Dict:
+    """Find backups that don't exist on the drive or have different sizes"""
+    new_backups = {}
+    
+    for source in sources:
+        existing = get_existing_backups(drive, source)
+        new_items = []
+        
+        for backup_path, size, mtime in source.backups:
+            # Check if backup doesn't exist or has a different size
+            if backup_path.name not in existing or existing[backup_path.name] != size:
+                new_items.append((backup_path, size, mtime))
+        
+        if new_items:
+            new_backups[source.name] = new_items
+    
+    return new_backups
+
+
+def format_size(bytes: int) -> str:
+    """Format bytes to human readable size (using decimal units like Finder)"""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes < 1000.0:
+            if unit in ['B', 'KB', 'MB']:
+                return f"{bytes:.0f} {unit}"
+            else:
+                return f"{bytes:.2f} {unit}"
+        bytes /= 1000.0
+    return f"{bytes:.2f} PB"
+
+
+def display_execution_plan(drive_name: str, new_backups: Dict):
+    """Display execution plan to user"""
+    console.print()
+    console.print(Panel.fit("📋 Execution Plan", style=f"bold {COLOR_PURPLE}"))
+    console.print()
+    
+    console.print(f"[{COLOR_CYAN}]Target Drive:[/{COLOR_CYAN}] {drive_name}")
+    console.print()
+    
+    total_size = 0
+    total_count = 0
+    
+    for source_name, backups in new_backups.items():
+        console.print(f"[bold {COLOR_PURPLE}]{source_name}:[/bold {COLOR_PURPLE}]")
+        
+        for backup_path, size, mtime in backups:
+            date_str = mtime.strftime("%Y-%m-%d %H:%M")
+            size_str = format_size(size)
+            
+            # Use different icons for files vs directories
+            icon = "📄" if backup_path.is_file() else "📁"
+            
+            console.print(f"  {icon} [{COLOR_WHITE}]{backup_path.name}[/{COLOR_WHITE}] [{COLOR_GRAY}]({size_str} - {date_str})[/{COLOR_GRAY}]")
+            
+            total_size += size
+            total_count += 1
+        
+        console.print()
+    
+    console.print(f"[{COLOR_GREEN}]Total: {total_count} backup(s), {format_size(total_size)}[/{COLOR_GREEN}]")
+    console.print()
+
+
+def copy_item(src: Path, dest: Path, progress_callback=None):
+    """Copy a file or directory with progress tracking"""
+    if src.is_file():
+        # Copy file with progress
+        size = src.stat().st_size
+        copied = 0
+        
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(src, 'rb') as fsrc:
+            with open(dest, 'wb') as fdst:
+                while True:
+                    chunk = fsrc.read(1024 * 1024)  # 1MB chunks
+                    if not chunk:
+                        break
+                    fdst.write(chunk)
+                    copied += len(chunk)
+                    if progress_callback:
+                        progress_callback(copied)
+    else:
+        # Copy directory
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Get all files in directory
+        all_files = list(src.rglob('*'))
+        files_only = [f for f in all_files if f.is_file()]
+        
+        for file_path in files_only:
+            relative_path = file_path.relative_to(src)
+            dest_path = dest / relative_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            size = file_path.stat().st_size
+            copied = 0
+            
+            with open(file_path, 'rb') as fsrc:
+                with open(dest_path, 'wb') as fdst:
+                    while True:
+                        chunk = fsrc.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        fdst.write(chunk)
+                        copied += len(chunk)
+                        if progress_callback:
+                            progress_callback(copied)
+
+
+def copy_backups(drive: Path, sources: List[BackupSource], new_backups: Dict, log_file: Path):
+    """Copy backups with progress tracking"""
+    
+    # Calculate total size
+    total_size = sum(size for backups in new_backups.values() for _, size, _ in backups)
+    copied_size = 0
+    
+    # Keep track of recent items for scrolling table
+    max_visible_rows = 15
+    item_rows = []
+    
+    # Create layout
+    layout = Layout()
+    layout.split_column(
+        Layout(name="upper", ratio=2),
+        Layout(name="lower", ratio=1)
+    )
+    layout["upper"].split_row(
+        Layout(name="plan", ratio=1),
+        Layout(name="table", ratio=2)
+    )
+    
+    # Execution plan text
+    plan_text = Text()
+    plan_text.append("📋 Execution Plan\n\n", style=f"bold {COLOR_PURPLE}")
+    plan_text.append(f"Drive: {drive.name}\n", style=COLOR_CYAN)
+    total_items = sum(len(backups) for backups in new_backups.values())
+    plan_text.append(f"Items: {total_items}\n", style=COLOR_CYAN)
+    plan_text.append(f"Size: {format_size(total_size)}\n", style=COLOR_CYAN)
+    
+    # Create a mapping of source names to source objects
+    source_map = {s.name: s for s in sources}
+    
+    with Live(layout, console=console, screen=True, refresh_per_second=4):
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(complete_style=COLOR_WHITE, finished_style=COLOR_WHITE),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeRemainingColumn(),
+            console=console
+        ) as progress:
+            
+            item_task = progress.add_task(f"[{COLOR_YELLOW}]Current Item", total=100)
+            overall_task = progress.add_task(f"[{COLOR_CYAN}]Overall Progress", total=total_size)
+            
+            layout["plan"].update(Panel(plan_text, border_style=COLOR_PURPLE))
+            
+            # Progress bars
+            progress_panel = Panel(progress, title="Progress", border_style=COLOR_PURPLE)
+            layout["lower"].update(progress_panel)
+            
+            with open(log_file, 'w') as log:
+                for source_name, backups in new_backups.items():
+                    # Get the source object to get its path
+                    source = source_map[source_name]
+                    home_content = Path.home() / "Content"
+                    relative_path = source.source_path.relative_to(home_content)
+                    backup_dest_dir = drive / "Content" / relative_path
+                    backup_dest_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    for backup_path, size, mtime in backups:
+                        dest_path = backup_dest_dir / backup_path.name
+                        
+                        # Determine icon and color
+                        if backup_path.is_file():
+                            icon = "📄"
+                            file_color = COLOR_BLUE
+                        else:
+                            icon = "📁"
+                            file_color = COLOR_PURPLE
+                        
+                        # Update current item task
+                        progress.update(item_task, completed=0, total=size,
+                                      description=f"[{file_color}]{icon} Copying: {backup_path.name}[/{file_color}]")
+                        
+                        # Track progress for this item
+                        item_copied = 0
+                        
+                        def update_progress(bytes_copied):
+                            nonlocal item_copied, copied_size
+                            delta = bytes_copied - item_copied
+                            item_copied = bytes_copied
+                            progress.update(item_task, completed=item_copied)
+                            progress.update(overall_task, completed=copied_size + item_copied)
+                        
+                        # Copy the item
+                        copy_item(backup_path, dest_path, update_progress)
+                        
+                        copied_size += size
+                        progress.update(overall_task, completed=copied_size)
+                        
+                        # Log the copy
+                        log.write(f"{str(backup_path)}\t{str(dest_path)}\n")
+                        
+                        # Update scrolling table
+                        relative_dest = str(dest_path.relative_to(drive))
+                        item_rows.append((backup_path.name, relative_dest, format_size(size)))
+                        
+                        # Create new table with only recent rows
+                        item_table = Table(show_header=True, header_style=f"bold {COLOR_PURPLE}", box=None)
+                        item_table.add_column("Backup", style=COLOR_WHITE)
+                        item_table.add_column("Destination", style=COLOR_GRAY)
+                        item_table.add_column("Size", style=COLOR_CYAN, justify="right")
+                        
+                        # Show only the last max_visible_rows
+                        visible_rows = item_rows[-max_visible_rows:]
+                        for item_name, item_dest, item_size in visible_rows:
+                            item_table.add_row(item_name, item_dest, item_size)
+                        
+                        layout["table"].update(Panel(item_table, title=f"Backups Copied ({len(item_rows)}/{total_items})", border_style=COLOR_PURPLE))
+            
+            # Mark progress as complete
+            progress.update(item_task, completed=size, description=f"[{COLOR_GREEN}]✓ Complete[/{COLOR_GREEN}]")
+            progress.update(overall_task, completed=total_size)
+            
+            # Small delay to ensure final render
+            import time
+            time.sleep(0.5)
+    
+    # Now outside the Live context - print completion message
+    console.print()
+    console.print(f"[{COLOR_GREEN}]✓ Backup complete.[/{COLOR_GREEN}]")
+    console.print(f"[{COLOR_GRAY}]Log file: {log_file}[/{COLOR_GRAY}]")
+    console.print()
+
+
+def main():
+    console.clear()
+    console.print(Panel.fit("💾 Library Backup Manager", style=f"bold {COLOR_PURPLE}"))
+    console.print()
+    
+    # Find external drives
+    external_drives = find_external_drives()
+    
+    if len(external_drives) == 0:
+        console.print(f"[{COLOR_RED}]✗ No external hard drives detected.[/{COLOR_RED}]")
+        sys.exit(1)
+    
+    # Get backup sources
+    sources = get_backup_sources()
+    
+    if len(sources) == 0:
+        console.print(f"[{COLOR_RED}]✗ No backup sources found.[/{COLOR_RED}]")
+        console.print(f"[{COLOR_GRAY}]Expected locations:[/{COLOR_GRAY}]")
+        console.print(f"  - ~/Content/Lightroom/Lightroom Backups")
+        console.print(f"  - ~/Content/DaVinci Resolve/DaVinci Resolve Backups")
+        sys.exit(1)
+    
+    # Scan backups
+    console.print(f"[{COLOR_CYAN}]Scanning backup sources...[/{COLOR_CYAN}]\n")
+    
+    for source in sources:
+        scan_backups(source)
+        console.print(f"[{COLOR_GREEN}]✓ {source.name}:[/{COLOR_GREEN}] {len(source.backups)} backup(s) found")
+    
+    console.print()
+    
+    # Select target drive
+    if len(external_drives) == 1:
+        target_drive = external_drives[0]
+        console.print(f"[{COLOR_CYAN}]Target drive:[/{COLOR_CYAN}] {target_drive.name}")
+    else:
+        console.print(f"[{COLOR_CYAN}]Select target drive:[/{COLOR_CYAN}]")
+        for i, drive in enumerate(external_drives, 1):
+            console.print(f"  {i}. {drive.name}")
+        
+        from rich.prompt import Prompt
+        choices = [str(i) for i in range(1, len(external_drives) + 1)]
+        selection = Prompt.ask("Choice", choices=choices, default="1")
+        target_drive = external_drives[int(selection) - 1]
+    
+    console.print()
+    
+    # Find new backups
+    new_backups = find_new_backups(sources, target_drive)
+    
+    if not new_backups:
+        console.print(f"[{COLOR_YELLOW}]✓ All backups are up to date on {target_drive.name}[/{COLOR_YELLOW}]")
+        sys.exit(0)
+    
+    # Display execution plan
+    display_execution_plan(target_drive.name, new_backups)
+    
+    # Confirm execution
+    if not Confirm.ask(f"[bold {COLOR_PURPLE}]Proceed with backup?[/bold {COLOR_PURPLE}]", default=True):
+        console.print(f"[{COLOR_YELLOW}]Operation cancelled.[/{COLOR_YELLOW}]")
+        sys.exit(0)
+    
+    # Create log file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = Path.cwd() / f"library_backup_{timestamp}.txt"
+    
+    # Copy backups
+    console.print(f"\n[{COLOR_CYAN}]Copying backups...[/{COLOR_CYAN}]\n")
+    copy_backups(target_drive, sources, new_backups, log_file)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+        sys.exit(0)
+    except Exception as e:
+        console.print(f"\n[red]Error: {str(e)}[/red]")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

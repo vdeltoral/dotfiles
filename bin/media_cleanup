@@ -1,0 +1,500 @@
+#!/bin/bash
+
+# Media Cache Cleaner Script
+# Cleans cache files from Final Cut Pro, After Effects, and DaVinci Resolve
+# Usage: ./media_cleanup.sh [path] [-v|--verbose] [-d|--dry-run]
+
+set -euo pipefail
+
+# Default values
+SEARCH_PATH="$HOME/Content/2025"
+VERBOSE=false
+DRY_RUN=false
+EXPLORE_MODE=false
+TOTAL_FREED=0
+
+# Application cache paths
+AE_CACHE_PATH="$HOME/.cache/AdobeAfterEffects"
+RESOLVE_CACHE_PATH="$HOME/.cache/DaVinciResolve/CacheClip"
+
+# Track which apps to clean
+CLEAN_FCP=true
+CLEAN_AE=true
+CLEAN_RESOLVE=true
+
+# Colors for output (Dark+ theme inspired)
+RED='\033[38;2;244;71;71m'      # Light red
+GREEN='\033[38;2;181;206;168m'  # Light green
+YELLOW='\033[38;2;220;220;170m' # Light yellow
+BLUE='\033[38;2;156;220;254m'   # Light blue
+GRAY='\033[38;2;128;128;128m'   # Gray
+CYAN='\033[38;2;78;201;176m'    # Cyan
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_color() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+# Function to convert bytes to human readable format
+human_readable() {
+    local bytes=$1
+    if [ "$bytes" -ge 1073741824 ]; then
+        echo "$(echo "scale=2; $bytes/1073741824" | bc)GB"
+    elif [ "$bytes" -ge 1048576 ]; then
+        echo "$(echo "scale=2; $bytes/1048576" | bc)MB"
+    elif [ "$bytes" -ge 1024 ]; then
+        echo "$(echo "scale=2; $bytes/1024" | bc)KB"
+    else
+        echo "${bytes}B"
+    fi
+}
+
+# Function to get directory size in bytes
+get_dir_size() {
+    local dir="$1"
+    if [ -d "$dir" ]; then
+        du -sk "$dir" 2>/dev/null | cut -f1 | awk '{print $1*1024}'
+    else
+        echo 0
+    fi
+}
+
+# Function to check if an application is running
+is_app_running() {
+    local app_name="$1"
+    pgrep -x "$app_name" > /dev/null 2>&1
+}
+
+# Function to check running applications and get user input
+check_running_apps() {
+    local running_apps=()
+    local app_display_names=()
+    
+    # Check each application
+    if is_app_running "Final Cut Pro"; then
+        running_apps+=("fcp")
+        app_display_names+=("Final Cut Pro 11")
+    fi
+    
+    if is_app_running "After Effects"; then
+        running_apps+=("ae")
+        app_display_names+=("After Effects 25")
+    fi
+    
+    if is_app_running "DaVinci Resolve" || is_app_running "Resolve"; then
+        running_apps+=("resolve")
+        app_display_names+=("DaVinci Resolve 20")
+    fi
+    
+    # If no apps are running, proceed with all
+    if [ ${#running_apps[@]} -eq 0 ]; then
+        print_color "$GREEN" "✓ No applications are currently running"
+        echo
+        return
+    fi
+    
+    # Display warning about running applications
+    print_color "$YELLOW" "⚠️  WARNING: The following applications are currently running:"
+    for app_name in "${app_display_names[@]}"; do
+        print_color "$YELLOW" "   • $app_name"
+    done
+    echo
+    print_color "$YELLOW" "It is recommended to close these applications before cleaning their caches."
+    echo
+    
+    # Ask user what to do
+    print_color "$CYAN" "What would you like to do?"
+    echo "1) Close all applications and continue"
+    echo "2) Skip cache cleaning for running applications"
+    echo "3) Cancel and exit"
+    echo
+    read -p "Enter your choice (1-3): " choice
+    echo
+    
+    case $choice in
+        1)
+            print_color "$YELLOW" "Please close the following applications manually:"
+            for app_name in "${app_display_names[@]}"; do
+                echo "  • $app_name"
+            done
+            echo
+            read -p "Press Enter once you have closed all applications..."
+            
+            # Verify apps are closed
+            local still_running=false
+            for app in "${running_apps[@]}"; do
+                case $app in
+                    fcp)
+                        if is_app_running "Final Cut Pro"; then
+                            print_color "$RED" "✗ Final Cut Pro is still running"
+                            still_running=true
+                        fi
+                        ;;
+                    ae)
+                        if is_app_running "After Effects"; then
+                            print_color "$RED" "✗ After Effects is still running"
+                            still_running=true
+                        fi
+                        ;;
+                    resolve)
+                        if is_app_running "DaVinci Resolve" || is_app_running "Resolve"; then
+                            print_color "$RED" "✗ DaVinci Resolve is still running"
+                            still_running=true
+                        fi
+                        ;;
+                esac
+            done
+            
+            if [ "$still_running" = true ]; then
+                echo
+                print_color "$RED" "Some applications are still running. Exiting for safety."
+                exit 1
+            fi
+            
+            print_color "$GREEN" "✓ All applications closed successfully"
+            echo
+            ;;
+        2)
+            # Disable cleaning for running apps
+            for app in "${running_apps[@]}"; do
+                case $app in
+                    fcp)
+                        CLEAN_FCP=false
+                        print_color "$GRAY" "→ Skipping Final Cut Pro cache cleaning"
+                        ;;
+                    ae)
+                        CLEAN_AE=false
+                        print_color "$GRAY" "→ Skipping After Effects cache cleaning"
+                        ;;
+                    resolve)
+                        CLEAN_RESOLVE=false
+                        print_color "$GRAY" "→ Skipping DaVinci Resolve cache cleaning"
+                        ;;
+                esac
+            done
+            echo
+            ;;
+        3)
+            print_color "$GRAY" "Operation cancelled by user"
+            exit 0
+            ;;
+        *)
+            print_color "$RED" "Invalid choice. Exiting."
+            exit 1
+            ;;
+    esac
+}
+
+# Function to clean cache directories
+clean_cache_dir() {
+    local cache_dir="$1"
+    local cache_type="$2"
+    
+    if [ ! -d "$cache_dir" ]; then
+        return
+    fi
+    
+    local size_before=$(get_dir_size "$cache_dir")
+    local readable_size=$(human_readable "$size_before")
+    
+    if [ "$size_before" -eq 0 ]; then
+        return
+    fi
+    
+    if [ "$VERBOSE" = true ]; then
+        print_color "$BLUE" "  Found $cache_type cache: $readable_size"
+    fi
+    
+    # Add whale emoji if 1GB or greater
+    local whale_emoji=""
+    if [ "$size_before" -ge 1073741824 ]; then
+        whale_emoji=" 🐋"
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        print_color "$YELLOW" "  [DRY RUN] Would remove $cache_type cache: $readable_size$whale_emoji"
+        TOTAL_FREED=$((TOTAL_FREED + size_before))
+    else
+        rm -rf "$cache_dir"/*
+        print_color "$GREEN" "  Removed $cache_type cache: $readable_size$whale_emoji"
+        TOTAL_FREED=$((TOTAL_FREED + size_before))
+    fi
+}
+
+# Function to process a single FCP library
+process_fcp_library() {
+    local library_path="$1"
+    local library_name=$(basename "$library_path")
+    
+    print_color "$BLUE" "Processing: $library_name"
+    
+    local found_cache=false
+    
+    # Explore mode - show everything inside the bundle
+    if [ "$EXPLORE_MODE" = true ]; then
+        print_color "$BLUE" "  Bundle contents:"
+        while IFS= read -r -d '' item; do
+            if [ -d "$item" ]; then
+                local size=$(get_dir_size "$item")
+                local readable_size=$(human_readable "$size")
+                local relative_path=${item#$library_path/}
+                print_color "$BLUE" "    [DIR]  $relative_path ($readable_size)"
+            fi
+        done < <(find "$library_path" -maxdepth 2 -type d ! -path "$library_path" -print0 2>/dev/null | sort -z)
+        echo
+        return
+    fi
+    
+    # Find all directories that could be cache-related by actually scanning the bundle
+    while IFS= read -r -d '' dir; do
+        local dir_name=$(basename "$dir")
+        local relative_path=${dir#$library_path/}
+        
+        # Check if this looks like a cache directory
+        case "$dir_name" in
+            "Cache"|"Render Files"|"Transcoded Media"|"Analysis Files"|"Optimized Media"|"Generated"|"Shared Items"|"Motion Templates.localized"|"Titles.localized"|"Effects.localized"|"Transitions.localized")
+                local dir_size=$(get_dir_size "$dir")
+                if [ "$dir_size" -gt 0 ]; then
+                    local readable_size=$(human_readable "$dir_size")
+                    found_cache=true
+                    
+                    if [ "$VERBOSE" = true ]; then
+                        print_color "$BLUE" "  Found $dir_name: $readable_size at $relative_path"
+                    fi
+                    
+                    # Add whale emoji if 1GB or greater
+                    local whale_emoji=""
+                    if [ "$dir_size" -ge 1073741824 ]; then
+                        whale_emoji=" 🐋"
+                    fi
+                    
+                    if [ "$DRY_RUN" = true ]; then
+                        print_color "$YELLOW" "  [DRY RUN] Would remove $dir_name: $readable_size$whale_emoji"
+                        TOTAL_FREED=$((TOTAL_FREED + dir_size))
+                    else
+                        rm -rf "$dir"/*
+                        print_color "$GREEN" "  Removed $dir_name: $readable_size$whale_emoji"
+                        TOTAL_FREED=$((TOTAL_FREED + dir_size))
+                    fi
+                fi
+                ;;
+        esac
+    done < <(find "$library_path" -type d -print0 2>/dev/null)
+    
+    # Also look for .fcpcache files
+    while IFS= read -r -d '' cache_file; do
+        if [ -f "$cache_file" ]; then
+            local file_size=$(stat -f%z "$cache_file" 2>/dev/null || echo 0)
+            if [ "$file_size" -gt 0 ]; then
+                local readable_size=$(human_readable "$file_size")
+                local relative_path=${cache_file#$library_path/}
+                found_cache=true
+                
+                if [ "$VERBOSE" = true ]; then
+                    print_color "$BLUE" "  Found cache file: $relative_path ($readable_size)"
+                fi
+                
+                if [ "$DRY_RUN" = true ]; then
+                    print_color "$YELLOW" "  [DRY RUN] Would remove cache file: $relative_path ($readable_size)"
+                    TOTAL_FREED=$((TOTAL_FREED + file_size))
+                else
+                    rm -f "$cache_file"
+                    print_color "$GREEN" "  Removed cache file: $relative_path ($readable_size)"
+                    TOTAL_FREED=$((TOTAL_FREED + file_size))
+                fi
+            fi
+        fi
+    done < <(find "$library_path" -name "*.fcpcache" -print0 2>/dev/null)
+    
+    if [ "$found_cache" = false ]; then
+        print_color "$GRAY" "  No cache files found"
+    fi
+    
+    echo
+}
+
+# Function to clean After Effects cache
+clean_after_effects_cache() {
+    if [ "$CLEAN_AE" = false ]; then
+        return
+    fi
+    
+    print_color "$BLUE" "=== After Effects 25 Cache Cleaning ==="
+    echo
+    
+    if [ ! -d "$AE_CACHE_PATH" ]; then
+        print_color "$GRAY" "After Effects cache directory not found: $AE_CACHE_PATH"
+        echo
+        return
+    fi
+    
+    local cache_size=$(get_dir_size "$AE_CACHE_PATH")
+    
+    if [ "$cache_size" -eq 0 ]; then
+        print_color "$GRAY" "No After Effects cache files found"
+        echo
+        return
+    fi
+    
+    local readable_size=$(human_readable "$cache_size")
+    print_color "$BLUE" "After Effects cache location: $AE_CACHE_PATH"
+    
+    clean_cache_dir "$AE_CACHE_PATH" "Disk Cache"
+    echo
+}
+
+# Function to clean DaVinci Resolve cache
+clean_resolve_cache() {
+    if [ "$CLEAN_RESOLVE" = false ]; then
+        return
+    fi
+    
+    print_color "$BLUE" "=== DaVinci Resolve 20 Cache Cleaning ==="
+    echo
+    
+    if [ ! -d "$RESOLVE_CACHE_PATH" ]; then
+        print_color "$GRAY" "DaVinci Resolve cache directory not found: $RESOLVE_CACHE_PATH"
+        echo
+        return
+    fi
+    
+    local cache_size=$(get_dir_size "$RESOLVE_CACHE_PATH")
+    
+    if [ "$cache_size" -eq 0 ]; then
+        print_color "$GRAY" "No DaVinci Resolve cache files found"
+        echo
+        return
+    fi
+    
+    local readable_size=$(human_readable "$cache_size")
+    print_color "$BLUE" "DaVinci Resolve cache location: $RESOLVE_CACHE_PATH"
+    
+    clean_cache_dir "$RESOLVE_CACHE_PATH" "CacheClip"
+    echo
+}
+
+# Function to display usage
+show_usage() {
+    echo "Usage: $0 [path] [options]"
+    echo ""
+    echo "Options:"
+    echo "  -v, --verbose    Show detailed output"
+    echo "  -d, --dry-run    Show what would be deleted without actually deleting"
+    echo "  -e, --explore    Show bundle contents for debugging (FCP only)"
+    echo "  -h, --help       Show this help message"
+    echo ""
+    echo "Cleans caches for:"
+    echo "  • Final Cut Pro 11 (*.fcpbundle in specified path)"
+    echo "  • After Effects 25 (~/.cache/AdobeAfterEffects)"
+    echo "  • DaVinci Resolve 20 (~/.cache/DaVinciResolve/CacheClip)"
+    echo ""
+    echo "Examples:"
+    echo "  $0                           # Clean default path: ~/Content/2025"
+    echo "  $0 /path/to/libraries        # Clean specific path for FCP"
+    echo "  $0 -v                        # Clean with verbose output"
+    echo "  $0 -d                        # Dry run to see what would be deleted"
+    echo "  $0 ~/Movies/FCP -v -d        # Dry run on specific path with verbose output"
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -d|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -e|--explore)
+            EXPLORE_MODE=true
+            shift
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option $1"
+            show_usage
+            exit 1
+            ;;
+        *)
+            SEARCH_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+# Verify bc is available for calculations
+if ! command -v bc &> /dev/null; then
+    echo "Error: 'bc' command is required but not installed."
+    echo "Install it with: brew install bc"
+    exit 1
+fi
+
+# Check if search path exists
+if [ ! -d "$SEARCH_PATH" ]; then
+    print_color "$RED" "Error: Path '$SEARCH_PATH' does not exist"
+    exit 1
+fi
+
+# Display header
+print_color "$GREEN" "=== Media Cache Cleaner ==="
+print_color "$GRAY" "Final Cut Pro 11 | After Effects 25 | DaVinci Resolve 20"
+echo
+if [ "$DRY_RUN" = true ]; then
+    print_color "$YELLOW" "DRY RUN MODE - No files will be deleted"
+    echo
+fi
+
+# Check for running applications
+check_running_apps
+
+# Clean After Effects cache
+clean_after_effects_cache
+
+# Clean DaVinci Resolve cache
+clean_resolve_cache
+
+# Clean Final Cut Pro libraries
+if [ "$CLEAN_FCP" = true ]; then
+    print_color "$BLUE" "=== Final Cut Pro 11 Cache Cleaning ==="
+    echo "Search path: $SEARCH_PATH"
+    if [ "$VERBOSE" = true ]; then
+        echo "Verbose mode enabled"
+    fi
+    echo
+    
+    # Find all FCP libraries (*.fcpbundle)
+    library_count=0
+    while IFS= read -r -d '' library; do
+        process_fcp_library "$library"
+        ((library_count++))
+    done < <(find "$SEARCH_PATH" -name "*.fcpbundle" -type d -print0 2>/dev/null)
+    
+    if [ "$library_count" -eq 0 ]; then
+        print_color "$GRAY" "No Final Cut Pro libraries found in $SEARCH_PATH"
+        echo
+    else
+        echo "Processed $library_count FCP libraries"
+        echo
+    fi
+fi
+
+# Summary
+print_color "$GREEN" "=== Summary ==="
+if [ "$TOTAL_FREED" -gt 0 ]; then
+    readable_total=$(human_readable "$TOTAL_FREED")
+    if [ "$DRY_RUN" = true ]; then
+        print_color "$YELLOW" "Would free: $readable_total"
+    else
+        print_color "$GREEN" "Total freed: $readable_total"
+    fi
+else
+    print_color "$YELLOW" "No cache files found to clean"
+fi

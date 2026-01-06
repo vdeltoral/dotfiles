@@ -1,0 +1,883 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import shutil
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, List, Tuple, Dict
+import subprocess
+
+from rich.console import Console, Group
+from rich.prompt import Prompt, Confirm
+from rich.panel import Panel
+from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
+from rich.table import Table
+from rich.layout import Layout
+from rich.live import Live
+from rich.text import Text
+
+console = Console()
+
+
+# One Dark color theme (Atom)
+COLOR_PURPLE = "#c678dd"
+COLOR_CYAN = "#56b6c2"
+COLOR_GREEN = "#98c379"
+COLOR_YELLOW = "#e5c07b"
+COLOR_ORANGE = "#d19a66"
+COLOR_RED = "#e06c75"
+COLOR_BLUE = "#61afef"
+COLOR_GRAY = "#5c6370"
+COLOR_WHITE = "#abb2bf"
+
+
+class CameraDevice:
+    """Represents a detected camera device"""
+    def __init__(self, name: str, mount_point: Path, pics_path: str = None, vids_path: str = None, audio_path: str = None):
+        self.name = name
+        self.mount_point = mount_point
+        self.pics_path = pics_path
+        self.vids_path = vids_path
+        self.audio_path = audio_path
+        self.pics = []
+        self.vids = []
+        self.audio = []
+        self.sidecar_files = {}  # Maps main file to list of sidecar files
+        self.old_files_detected = False  # For DJI Mic 3 old file warning
+
+
+def find_sd_cards() -> List[Tuple[Path, bool]]:
+    """Find all mounted SD cards. Returns list of (path, is_dji_mic3) tuples"""
+    volumes = Path("/Volumes")
+    if not volumes.exists():
+        return []
+    
+    sd_cards = []
+    for volume in volumes.iterdir():
+        if volume.is_dir():
+            # Check if it's likely an SD card (typically smaller than 900GB)
+            try:
+                stat = os.statvfs(str(volume))
+                size_gb = (stat.f_blocks * stat.f_frsize) / (1024**3)
+                if size_gb < 900:  # Likely an SD card, not a hard drive
+                    # Check if it's a DJI Mic 3 card
+                    is_dji_mic3 = False
+                    if volume.name in ["NO NAME", "NO NAME 1"]:
+                        # Check for TX_MIC folder
+                        has_tx_mic = any(item.name.startswith("TX_MIC") and item.is_dir() for item in volume.iterdir())
+                        if has_tx_mic:
+                            is_dji_mic3 = True
+                    
+                    sd_cards.append((volume, is_dji_mic3))
+            except:
+                continue
+    
+    return sd_cards
+
+
+def find_external_drives() -> List[Path]:
+    """Find all external hard drives (>900GB)"""
+    volumes = Path("/Volumes")
+    if not volumes.exists():
+        return []
+    
+    drives = []
+    for volume in volumes.iterdir():
+        if volume.is_dir() and volume.name != "Macintosh HD":
+            try:
+                stat = os.statvfs(str(volume))
+                size_gb = (stat.f_blocks * stat.f_frsize) / (1024**3)
+                if size_gb >= 900:  # Likely a hard drive
+                    drives.append(volume)
+            except:
+                continue
+    
+    return drives
+
+
+def identify_camera(sd_card: Path) -> Optional[CameraDevice]:
+    """Identify which camera this SD card is from"""
+    
+    # Check for DJI Mic 3 (must check card name AND folder structure)
+    if sd_card.name in ["NO NAME", "NO NAME 1"]:
+        has_tx_mic = any(item.name.startswith("TX_MIC") and item.is_dir() for item in sd_card.iterdir())
+        if has_tx_mic:
+            # Find the TX_MIC folder
+            tx_mic_folder = None
+            for item in sd_card.iterdir():
+                if item.name.startswith("TX_MIC") and item.is_dir():
+                    tx_mic_folder = item.name
+                    break
+            
+            if tx_mic_folder:
+                return CameraDevice("DJI Mic 3", sd_card, audio_path=f"{tx_mic_folder}/**/*")
+    
+    # Check for Sony camera
+    mediapro = sd_card / "PRIVATE" / "M4ROOT" / "MEDIAPRO.XML"
+    
+    if mediapro.exists():
+        try:
+            tree = ET.parse(mediapro)
+            root = tree.getroot()
+            
+            # Extract namespace from root tag
+            namespace = root.tag.split('}')[0].strip('{') if '}' in root.tag else ''
+            ns = {'ns': namespace} if namespace else {}
+            
+            # Search with namespace awareness
+            if namespace:
+                system_kind = root.find(".//ns:Properties/ns:System", ns)
+            else:
+                system_kind = root.find(".//Properties/System")
+            
+            if system_kind is not None:
+                kind = system_kind.get("systemKind")
+                
+                if kind == "ILCE-7M4":
+                    return CameraDevice("Sony A7IV", sd_card, 
+                                      pics_path="DCIM/**/*",
+                                      vids_path="PRIVATE/M4ROOT/CLIP/*")
+                elif kind == "ZV-E1":
+                    return CameraDevice("Sony ZV-E1", sd_card,
+                                      pics_path="DCIM/**/*",
+                                      vids_path="PRIVATE/M4ROOT/CLIP/*")
+        except Exception as e:
+            pass
+    
+    # Check for DJI drone
+    dcim = sd_card / "DCIM"
+    
+    if dcim.exists():
+        for item in dcim.iterdir():
+            if item.is_dir() and "DJI" in item.name.upper():
+                return CameraDevice("DJI Mini 4 Pro", sd_card,
+                                  pics_path="DCIM/**/*",
+                                  vids_path="DCIM/**/*")
+    
+    # Skeletons for future implementation
+    # TODO: iPhone 17 Pro detection
+    # TODO: Insta360 X4 detection
+    # TODO: GoPro Hero 9 Black detection
+    # TODO: RODE Wireless GO II detection (manual transfer for now)
+    
+    return None
+
+
+def scan_files(device: CameraDevice):
+    """Scan and categorize files from the device"""
+    
+    # Scan photos
+    if device.pics_path:
+        pics_pattern = device.pics_path.split("/**/*")[0]
+        pics_dir = device.mount_point / pics_pattern
+        if pics_dir.exists():
+            for root, dirs, files in os.walk(pics_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # Skip hidden files and sidecar files
+                    if not file.startswith('.') and file_path.suffix.upper() not in ['.XML', '.SRT', '.LRF']:
+                        device.pics.append(file_path)
+    
+    # Scan videos
+    if device.vids_path:
+        vids_dir = device.mount_point / device.vids_path.rstrip("/*")
+        if vids_dir.exists():
+            for root, dirs, files in os.walk(vids_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # Skip hidden files and sidecar files
+                    if not file.startswith('.') and file_path.suffix.upper() not in ['.XML', '.SRT', '.LRF']:
+                        device.vids.append(file_path)
+                        
+                        # Look for sidecar files
+                        base_name = file_path.stem
+                        sidecars = []
+                        
+                        # Sony XML sidecar
+                        xml_sidecar = file_path.parent / f"{base_name}M01.XML"
+                        if xml_sidecar.exists():
+                            sidecars.append(xml_sidecar)
+                        
+                        # DJI SRT and LRF sidecars
+                        srt_sidecar = file_path.with_suffix('.SRT')
+                        if srt_sidecar.exists():
+                            sidecars.append(srt_sidecar)
+                        
+                        lrf_sidecar = file_path.with_suffix('.LRF')
+                        if lrf_sidecar.exists():
+                            sidecars.append(lrf_sidecar)
+                        
+                        if sidecars:
+                            device.sidecar_files[file_path] = sidecars
+    
+    # Scan audio
+    if device.audio_path:
+        # Check if DJI Mic 3 - filter files by timestamp
+        is_dji_mic3 = device.name == "DJI Mic 3"
+        cutoff_time = datetime.now().timestamp() - (12 * 60 * 60)  # 12 hours ago
+        
+        audio_pattern = device.audio_path.split("/**/*")[0]
+        audio_dir = device.mount_point / audio_pattern
+        if audio_dir.exists():
+            for root, dirs, files in os.walk(audio_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    if not file.startswith('.'):
+                        # For DJI Mic 3, check file timestamp
+                        if is_dji_mic3:
+                            file_mtime = file_path.stat().st_mtime
+                            if file_mtime < cutoff_time:
+                                device.old_files_detected = True
+                                continue  # Skip old files
+                            
+                            # Check for sidecar (edit version)
+                            # If file is "TX01_MIC001_20251103_204722_orig.wav"
+                            # sidecar is "TX01_MIC001_20251103_204722_edit.wav"
+                            if "_orig." in file:
+                                base = file.replace("_orig.", "_edit.")
+                                edit_sidecar = file_path.parent / base
+                                if edit_sidecar.exists():
+                                    if file_path not in device.sidecar_files:
+                                        device.sidecar_files[file_path] = []
+                                    device.sidecar_files[file_path].append(edit_sidecar)
+                        
+                        device.audio.append(file_path)
+
+
+def format_size(bytes: int) -> str:
+    """Format bytes to human readable size (using decimal units like Finder)"""
+    # Finder uses decimal (base-10) units: 1 KB = 1000 bytes, 1 MB = 1000 KB, etc.
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes < 1000.0:
+            if unit in ['B', 'KB', 'MB']:
+                return f"{bytes:.0f} {unit}"
+            else:  # GB, TB
+                return f"{bytes:.2f} {unit}"
+        bytes /= 1000.0
+    return f"{bytes:.2f} PB"
+
+
+def get_total_size(files: List[Path]) -> int:
+    """Calculate total size of files"""
+    total = 0
+    for file in files:
+        try:
+            total += file.stat().st_size
+        except:
+            pass
+    return total
+
+
+def get_existing_projects(content_dir: Path, year: str) -> List[Tuple[str, str]]:
+    """Get list of existing projects for the current year with dates"""
+    year_dir = content_dir / year
+    if not year_dir.exists():
+        return []
+    
+    projects = []
+    for item in year_dir.iterdir():
+        if item.is_dir():
+            # Keep full directory name (format: YYYY_MM_DD - Project Name, Location)
+            projects.append((item.name.split(" - ")[0], item.name))
+    
+    # Sort by date (oldest first)
+    projects.sort(key=lambda x: x[0])
+    
+    return [p[1] for p in projects]
+
+
+def check_merge_conflict(project_dir: Path, shoot_date: str, camera_name: str, has_pics: bool, has_vids: bool, has_audio: bool) -> bool:
+    """Check if copying would require merging (not supported yet)"""
+    
+    if has_pics:
+        pics_camera_dir = project_dir / "PICS" / shoot_date / camera_name
+        if pics_camera_dir.exists() and any(pics_camera_dir.iterdir()):
+            return True
+    
+    if has_vids:
+        vids_camera_dir = project_dir / "VIDS" / shoot_date / camera_name
+        if vids_camera_dir.exists() and any(vids_camera_dir.iterdir()):
+            return True
+    
+    if has_audio:
+        audio_camera_dir = project_dir / "AUDIO" / shoot_date / camera_name
+        if audio_camera_dir.exists() and any(audio_camera_dir.iterdir()):
+            return True
+    
+    return False
+
+
+def get_next_mic_number(project_dir: Path, shoot_date: str, mic_name: str) -> Tuple[int, bool]:
+    """
+    Check for existing mic folders and return next number.
+    Returns: (next_number, needs_confirmation)
+    """
+    audio_date_dir = project_dir / "AUDIO" / shoot_date
+    if not audio_date_dir.exists():
+        return 1, False
+    
+    existing_nums = []
+    for item in audio_date_dir.iterdir():
+        if item.is_dir() and item.name.startswith(mic_name):
+            # Extract number from "Mic Name - X"
+            parts = item.name.split(" - ")
+            if len(parts) == 2:
+                try:
+                    num = int(parts[1])
+                    existing_nums.append(num)
+                except:
+                    pass
+    
+    if not existing_nums:
+        return 1, False
+    else:
+        return max(existing_nums) + 1, True
+
+
+def create_execution_plan(device: CameraDevice, output_drive: str, project_name: str, 
+                         project_date: str, shoot_date: str, content_type: str,
+                         mic_suffix: str = "") -> Dict:
+    """Create execution plan"""
+    
+    camera_display = device.name + mic_suffix
+    
+    plan = {
+        "sd_card_source": str(device.mount_point.name),
+        "camera_detected": camera_display,
+        "output_drive": output_drive,
+        "project_name": project_name,
+        "project_date": project_date,
+        "shoot_date": shoot_date,
+        "content_type": content_type,
+        "files": {
+            "photos": (len(device.pics), get_total_size(device.pics)) if content_type in ["Photo & Video", "Photo"] else (0, 0),
+            "videos": (len(device.vids), get_total_size(device.vids)) if content_type in ["Photo & Video", "Video"] else (0, 0),
+            "audio": (len(device.audio), get_total_size(device.audio)) if device.audio else (0, 0)
+        }
+    }
+    
+    return plan
+
+
+def display_execution_plan(plan: Dict):
+    """Display execution plan to user"""
+    console.print()
+    console.print(Panel.fit("📋 Execution Plan", style=f"bold {COLOR_PURPLE}"))
+    console.print()
+    
+    console.print(f"[{COLOR_CYAN}]SD Card Source:[/{COLOR_CYAN}] {plan['sd_card_source']}")
+    console.print(f"[{COLOR_CYAN}]Device:[/{COLOR_CYAN}] {plan['camera_detected']}")
+    console.print(f"[{COLOR_CYAN}]Output Drive:[/{COLOR_CYAN}] {plan['output_drive']}")
+    console.print(f"[{COLOR_CYAN}]Project Name:[/{COLOR_CYAN}] {plan['project_name']}")
+    console.print(f"[{COLOR_CYAN}]Project Date:[/{COLOR_CYAN}] {plan['project_date']}")
+    console.print(f"[{COLOR_CYAN}]Shoot Date:[/{COLOR_CYAN}] {plan['shoot_date']}")
+    console.print(f"[{COLOR_CYAN}]Content Type:[/{COLOR_CYAN}] {plan['content_type']}")
+    console.print()
+    
+    photo_count, photo_size = plan['files']['photos']
+    video_count, video_size = plan['files']['videos']
+    audio_count, audio_size = plan['files']['audio']
+    
+    if photo_count > 0:
+        console.print(f"[{COLOR_GREEN}]📷 {photo_count} photos ({format_size(photo_size)})[/{COLOR_GREEN}]")
+    if video_count > 0:
+        console.print(f"[{COLOR_YELLOW}]🎥 {video_count} videos ({format_size(video_size)})[/{COLOR_YELLOW}]")
+    if audio_count > 0:
+        console.print(f"[{COLOR_ORANGE}]🎤 {audio_count} audio files ({format_size(audio_size)})[/{COLOR_ORANGE}]")
+    
+    console.print()
+
+
+def copy_files(device: CameraDevice, project_dir: Path, shoot_date: str, 
+               content_type: str, log_file: Path, mic_suffix: str = ""):
+    """Copy files with progress tracking"""
+    
+    camera_name = device.name + mic_suffix
+    files_to_copy = []
+    
+    # Determine which files to copy based on content type
+    if content_type in ["Photo & Video", "Photo"] and device.pics:
+        pics_dest = project_dir / "PICS" / shoot_date / camera_name
+        pics_dest.mkdir(parents=True, exist_ok=True)
+        for pic in device.pics:
+            files_to_copy.append((pic, pics_dest / pic.name, "PICS", "photo"))
+    
+    if content_type in ["Photo & Video", "Video"] and device.vids:
+        vids_dest = project_dir / "VIDS" / shoot_date / camera_name
+        vids_dest.mkdir(parents=True, exist_ok=True)
+        for vid in device.vids:
+            files_to_copy.append((vid, vids_dest / vid.name, "VIDS", "video"))
+            # Add sidecar files
+            if vid in device.sidecar_files:
+                for sidecar in device.sidecar_files[vid]:
+                    files_to_copy.append((sidecar, vids_dest / sidecar.name, "VIDS", "video"))
+    
+    if device.audio:
+        audio_dest = project_dir / "AUDIO" / shoot_date / camera_name
+        audio_dest.mkdir(parents=True, exist_ok=True)
+        for audio in device.audio:
+            files_to_copy.append((audio, audio_dest / audio.name, "AUDIO", "audio"))
+            # Add sidecar files for audio
+            if audio in device.sidecar_files:
+                for sidecar in device.sidecar_files[audio]:
+                    files_to_copy.append((sidecar, audio_dest / sidecar.name, "AUDIO", "audio"))
+    
+    # Calculate total size for progress
+    total_size = sum(src.stat().st_size for src, dest, mtype, ftype in files_to_copy)
+    copied_size = 0
+    
+    # Keep track of recent files for scrolling table
+    max_visible_rows = 20  # Show last 20 files
+    file_rows = []
+    
+    # Create layout
+    layout = Layout()
+    layout.split_column(
+        Layout(name="upper", ratio=2),
+        Layout(name="lower", ratio=1)
+    )
+    layout["upper"].split_row(
+        Layout(name="plan", ratio=1),
+        Layout(name="table", ratio=2)
+    )
+    
+    # Execution plan text
+    plan_text = Text()
+    plan_text.append("📋 Execution Plan\n\n", style=f"bold {COLOR_PURPLE}")
+    plan_text.append(f"Camera: {camera_name}\n", style=COLOR_CYAN)
+    plan_text.append(f"Shoot Date: {shoot_date}\n", style=COLOR_CYAN)
+    plan_text.append(f"Files: {len(files_to_copy)}\n", style=COLOR_CYAN)
+    
+    with Live(layout, console=console, screen=True, refresh_per_second=4):
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(complete_style=COLOR_WHITE, finished_style=COLOR_WHITE),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeRemainingColumn(),
+            console=console
+        ) as progress:
+            
+            file_task = progress.add_task(f"[{COLOR_YELLOW}]Current File", total=100)
+            overall_task = progress.add_task(f"[{COLOR_CYAN}]Overall Progress", total=total_size)
+            
+            layout["plan"].update(Panel(plan_text, border_style=COLOR_PURPLE))
+            
+            # Progress bars
+            progress_panel = Panel(progress, title="Progress", border_style=COLOR_PURPLE)
+            layout["lower"].update(progress_panel)
+            
+            with open(log_file, 'w') as log:
+                for src, dest, medium_type, file_type in files_to_copy:
+                    file_size = src.stat().st_size
+                    
+                    # Determine color based on file type
+                    if file_type == "photo":
+                        file_color = COLOR_GREEN
+                    elif file_type == "video":
+                        file_color = COLOR_YELLOW
+                    elif file_type == "audio":
+                        file_color = COLOR_ORANGE
+                    else:
+                        file_color = COLOR_GRAY
+                    
+                    # Update current file task with appropriate color
+                    progress.update(file_task, completed=0, total=file_size, 
+                                  description=f"[{file_color}]Copying: {src.name}[/{file_color}]")
+                    
+                    # Copy file with progress
+                    with open(src, 'rb') as fsrc:
+                        with open(dest, 'wb') as fdst:
+                            copied = 0
+                            while True:
+                                chunk = fsrc.read(1024 * 1024)  # 1MB chunks
+                                if not chunk:
+                                    break
+                                fdst.write(chunk)
+                                copied += len(chunk)
+                                progress.update(file_task, completed=copied)
+                                progress.update(overall_task, completed=copied_size + copied)
+                    
+                    copied_size += file_size
+                    progress.update(overall_task, completed=copied_size)
+                    
+                    # Log the copy (tab-delimited with full paths)
+                    log.write(f"{str(src)}\t{str(dest)}\n")
+                    
+                    # Update scrolling table
+                    relative_dest = f"{medium_type}/{shoot_date}/{camera_name}/{dest.name}"
+                    file_rows.append((src.name, relative_dest))
+                    
+                    # Create new table with only recent rows
+                    file_table = Table(show_header=True, header_style=f"bold {COLOR_PURPLE}", box=None)
+                    file_table.add_column("File", style=COLOR_WHITE)
+                    file_table.add_column("Destination", style=COLOR_GRAY)
+                    
+                    # Show only the last max_visible_rows
+                    visible_rows = file_rows[-max_visible_rows:]
+                    for file_name, file_dest in visible_rows:
+                        file_table.add_row(file_name, file_dest)
+                    
+                    layout["table"].update(Panel(file_table, title=f"Files Copied ({len(file_rows)}/{len(files_to_copy)})", border_style=COLOR_PURPLE))
+            
+            progress.update(file_task, completed=file_task, description=f"[{COLOR_GREEN}]✓ Complete[/{COLOR_GREEN}]")
+            progress.tasks[0].completed = progress.tasks[0].total
+            
+            # Keep the display open and show completion message
+            console.print()
+            console.print(f"[{COLOR_GREEN}]✓ Transfer complete. SD card ejected.[/{COLOR_GREEN}]")
+            console.print(f"[{COLOR_GRAY}]Log file: {log_file}[/{COLOR_GRAY}]")
+            console.print()
+            
+            # Wait for user input (Escape, Enter, or Ctrl+C) before exiting
+            import tty
+            import termios
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                while True:
+                    char = sys.stdin.read(1)
+                    # Check for Escape (27), Enter (13 or 10), or Ctrl+C (3)
+                    if ord(char) in [27, 13, 10, 3]:
+                        break
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def unmount_sd_card(sd_card: Path) -> bool:
+    """Attempt to unmount the SD card"""
+    try:
+        subprocess.run(['diskutil', 'unmount', str(sd_card)], check=True, capture_output=True)
+        return True
+    except:
+        return False
+
+
+def main():
+    console.clear()
+    console.print(Panel.fit("📸 SD Card Content Importer", style=f"bold {COLOR_PURPLE}"))
+    console.print()
+    
+    # Find SD cards
+    sd_card_info = find_sd_cards()
+    
+    if len(sd_card_info) == 0:
+        console.print(f"[{COLOR_RED}]❌ No SD card detected.[/{COLOR_RED}]")
+        sys.exit(1)
+    
+    # Group DJI Mic 3 cards together
+    dji_mic3_cards = [(path, is_dji) for path, is_dji in sd_card_info if is_dji]
+    other_cards = [(path, is_dji) for path, is_dji in sd_card_info if not is_dji]
+    
+    # Scan all cards to identify them
+    console.print(f"[{COLOR_CYAN}]Scanning SD cards...[/{COLOR_CYAN}]\n")
+    
+    # Build list of importable options with device info
+    import_options = []
+    
+    # Handle DJI Mic 3 cards as a group
+    if len(dji_mic3_cards) > 0:
+        if len(dji_mic3_cards) <= 2:
+            devices = []
+            for sd_card, _ in dji_mic3_cards:
+                device = identify_camera(sd_card)
+                if device:
+                    scan_files(device)
+                    devices.append(device)
+            
+            if len(devices) > 0:
+                total_audio = sum(len(d.audio) for d in devices)
+                card_names = ", ".join([card.name for card, _ in dji_mic3_cards])
+                import_options.append(("dji_mic3", devices, f"DJI Mic 3 ({card_names}) - {total_audio} audio files"))
+        else:
+            console.print(f"[{COLOR_RED}]❌ More than 2 DJI Mic 3 cards detected. Please mount at most 2 DJI Mic 3 cards at a time.[/{COLOR_RED}]")
+            sys.exit(1)
+    
+    # Handle other cards individually
+    for card, _ in other_cards:
+        device = identify_camera(card)
+        if device:
+            scan_files(device)
+            pic_count = len(device.pics)
+            vid_count = len(device.vids)
+            audio_count = len(device.audio)
+            
+            # Build description
+            parts = []
+            if pic_count > 0:
+                parts.append(f"{pic_count} photos")
+            if vid_count > 0:
+                parts.append(f"{vid_count} videos")
+            if audio_count > 0:
+                parts.append(f"{audio_count} audio")
+            
+            content_desc = ", ".join(parts) if parts else "empty"
+            import_options.append(("other", [device], f"{device.name} ({card.name}) - {content_desc}"))
+        else:
+            # Unknown device
+            import_options.append(("other", None, f"Unknown ({card.name})"))
+    
+    # If multiple options, ask user to choose
+    selected_devices = None
+    selected_type = None
+    
+    if len(import_options) == 0:
+        console.print(f"[{COLOR_RED}]❌ No recognized devices found.[/{COLOR_RED}]")
+        sys.exit(1)
+    elif len(import_options) == 1:
+        # Only one option, use it
+        selected_type, selected_devices, _ = import_options[0]
+        if selected_devices is None:
+            console.print(f"[{COLOR_RED}]❌ Unable to identify camera type.[/{COLOR_RED}]")
+            sys.exit(1)
+    else:
+        # Multiple options, ask user
+        console.print(f"[{COLOR_CYAN}]Multiple SD cards detected. Select which to import:[/{COLOR_CYAN}]")
+        for i, (opt_type, devices_list, display_name) in enumerate(import_options, 1):
+            console.print(f"  {i}. {display_name}")
+        
+        choices = [str(i) for i in range(1, len(import_options) + 1)]
+        selection = Prompt.ask("Choice", choices=choices, default="1")
+        selected_type, selected_devices, _ = import_options[int(selection) - 1]
+        
+        if selected_devices is None:
+            console.print(f"[{COLOR_RED}]❌ Unable to identify camera type.[/{COLOR_RED}]")
+            sys.exit(1)
+    
+    console.print()
+    
+    # Now process the selected devices
+    devices = selected_devices
+    is_dji_mic3 = (selected_type == "dji_mic3")
+    
+    # Display what was selected
+    if is_dji_mic3:
+        for idx, device in enumerate(devices, 1):
+            console.print(f"[{COLOR_GREEN}]✓ SD card detected:[/{COLOR_GREEN}] {device.mount_point.name}")
+            console.print(f"[{COLOR_GREEN}]✓ Camera identified:[/{COLOR_GREEN}] {device.name} (Card {idx})")
+        
+        # Check for old files warning
+        for device in devices:
+            if device.old_files_detected:
+                console.print(f"[{COLOR_YELLOW}]⚠ Note: Older audio files (>12 hours) detected on {device.mount_point.name} and were skipped.[/{COLOR_YELLOW}]")
+    else:
+        device = devices[0]
+        console.print(f"[{COLOR_GREEN}]✓ SD card detected:[/{COLOR_GREEN}] {device.mount_point.name}")
+        console.print(f"[{COLOR_GREEN}]✓ Camera identified:[/{COLOR_GREEN}] {device.name}")
+    
+    console.print()
+    
+    # Use first device for project setup
+    device = devices[0]
+    
+    # Display file counts
+    pic_count = len(device.pics)
+    pic_size = get_total_size(device.pics)
+    vid_count = len(device.vids)
+    vid_size = get_total_size(device.vids)
+    
+    if is_dji_mic3:
+        audio_count = sum(len(d.audio) for d in devices)
+        audio_size = sum(get_total_size(d.audio) for d in devices)
+    else:
+        audio_count = len(device.audio)
+        audio_size = get_total_size(device.audio)
+    
+    if pic_count == 0:
+        console.print("[dim]0 photos[/dim]")
+    else:
+        console.print(f"[{COLOR_GREEN}]{pic_count} photos ({format_size(pic_size)})[/{COLOR_GREEN}]")
+    
+    if vid_count == 0:
+        console.print("[dim]0 videos[/dim]")
+    else:
+        console.print(f"[{COLOR_YELLOW}]{vid_count} videos ({format_size(vid_size)})[/{COLOR_YELLOW}]")
+    
+    if audio_count > 0:
+        console.print(f"[{COLOR_ORANGE}]{audio_count} audio files ({format_size(audio_size)})[/{COLOR_ORANGE}]")
+    
+    console.print()
+    
+    # Find external drives
+    external_drives = find_external_drives()
+    
+    # Prompt for output location
+    if external_drives:
+        choices = ["Macintosh HD"] + [drive.name for drive in external_drives]
+        console.print(f"[{COLOR_CYAN}]Select output location:[/{COLOR_CYAN}]")
+        for i, choice in enumerate(choices, 1):
+            console.print(f"  {i}. {choice}")
+        
+        selection = Prompt.ask("Choice", choices=[str(i) for i in range(1, len(choices) + 1)], default="1")
+        output_location = choices[int(selection) - 1]
+    else:
+        output_location = "Macintosh HD"
+        console.print(f"[{COLOR_CYAN}]Output location:[/{COLOR_CYAN}] {output_location}")
+    
+    # Determine content directory
+    if output_location == "Macintosh HD":
+        content_dir = Path.home() / "Content"
+    else:
+        for drive in external_drives:
+            if drive.name == output_location:
+                content_dir = drive / "Content"
+                break
+    
+    content_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Get current year
+    current_year = datetime.now().strftime("%Y")
+    year_dir = content_dir / current_year
+    year_dir.mkdir(exist_ok=True)
+    
+    # Get existing projects
+    existing_projects = get_existing_projects(content_dir, current_year)
+    
+    console.print()
+    if existing_projects:
+        console.print(f"[{COLOR_CYAN}]Existing projects:[/{COLOR_CYAN}]")
+        for i, project in enumerate(existing_projects, 1):
+            console.print(f"  {i}. {project}")
+        
+        choices_str = '/'.join([str(i) for i in range(1, len(existing_projects) + 1)])
+        
+        while True:
+            selection = Prompt.ask(f"Select project or name a new one [{choices_str}]", default=None)
+            
+            # Check if it's a number (existing project)
+            try:
+                selection_num = int(selection)
+                if 1 <= selection_num <= len(existing_projects):
+                    full_project_name = existing_projects[selection_num - 1]
+                    project_date = full_project_name.split(" - ")[0]
+                    project_name = full_project_name.split(" - ", 1)[1]
+                    location = project_name.split(", ", 1)[1] if ", " in project_name else ""
+                    break
+                else:
+                    console.print(f"[{COLOR_RED}]Invalid number. Please select 1-{len(existing_projects)} or enter a new project name.[/{COLOR_RED}]")
+            except ValueError:
+                # Not a number, treat as new project name
+                project_name_input = selection
+                location = Prompt.ask(f"[{COLOR_CYAN}]Geographic location[/{COLOR_CYAN}]")
+                project_name = f"{project_name_input}, {location}"
+                project_date = Prompt.ask(f"[{COLOR_CYAN}]Project date[/{COLOR_CYAN}] (YYYY_MM_DD)", 
+                                        default=datetime.now().strftime("%Y_%m_%d"))
+                break
+    else:
+        project_name_input = Prompt.ask(f"[{COLOR_CYAN}]Project name[/{COLOR_CYAN}]")
+        location = Prompt.ask(f"[{COLOR_CYAN}]Geographic location[/{COLOR_CYAN}]")
+        project_name = f"{project_name_input}, {location}"
+        project_date = Prompt.ask(f"[{COLOR_CYAN}]Project date[/{COLOR_CYAN}] (YYYY_MM_DD)", 
+                                default=datetime.now().strftime("%Y_%m_%d"))
+    
+    # Get shoot date
+    shoot_date = Prompt.ask(f"[{COLOR_CYAN}]Shoot date[/{COLOR_CYAN}] (YYYY_MM_DD)", default=project_date)
+    
+    # Determine content type
+    content_type = "Photo & Video"
+    if pic_count > 0 and vid_count > 0:
+        console.print(f"\n[{COLOR_CYAN}]Content type:[/{COLOR_CYAN}]")
+        console.print(f"  1. [{COLOR_GREEN}]Photo[/{COLOR_GREEN}] & [{COLOR_YELLOW}]Video[/{COLOR_YELLOW}] - [{COLOR_GREEN}]{pic_count} photos ({format_size(pic_size)})[/{COLOR_GREEN}], [{COLOR_YELLOW}]{vid_count} videos ({format_size(vid_size)})[/{COLOR_YELLOW}]")
+        console.print(f"  2. [{COLOR_GREEN}]Photo only[/{COLOR_GREEN}] - [{COLOR_GREEN}]{pic_count} photos ({format_size(pic_size)})[/{COLOR_GREEN}]")
+        console.print(f"  3. [{COLOR_YELLOW}]Video only[/{COLOR_YELLOW}] - [{COLOR_YELLOW}]{vid_count} videos ({format_size(vid_size)})[/{COLOR_YELLOW}]")
+        selection = Prompt.ask("Choice", choices=["1", "2", "3"], default="1")
+        content_type = ["Photo & Video", "Photo", "Video"][int(selection) - 1]
+    elif pic_count > 0:
+        content_type = "Photo"
+    elif vid_count > 0:
+        content_type = "Video"
+    
+    # Handle mic numbering for audio devices
+    mic_suffixes = []
+    if audio_count > 0:
+        # For DJI Mic 3 with 2 cards
+        if is_dji_mic3 and len(devices) == 2:
+            mic_suffixes = [" - 1", " - 2"]
+        else:
+            # Single mic card or other audio device
+            next_num, needs_confirm = get_next_mic_number(
+                year_dir / f"{project_date} - {project_name}",
+                shoot_date,
+                device.name
+            )
+            
+            if needs_confirm:
+                confirm = Confirm.ask(
+                    f"[{COLOR_YELLOW}]'{device.name} - {next_num - 1}' already exists. Create '{device.name} - {next_num}'?[/{COLOR_YELLOW}]",
+                    default=True
+                )
+                if not confirm:
+                    console.print(f"[{COLOR_RED}]Operation cancelled.[/{COLOR_RED}]")
+                    sys.exit(0)
+            
+            mic_suffixes = [f" - {next_num}"]
+    
+    # Create project directory
+    project_dir = year_dir / f"{project_date} - {project_name}"
+    project_dir.mkdir(exist_ok=True)
+    
+    # Check for merge conflicts
+    has_pics = content_type in ["Photo & Video", "Photo"] and pic_count > 0
+    has_vids = content_type in ["Photo & Video", "Video"] and vid_count > 0
+    has_audio = audio_count > 0
+    
+    # For DJI Mic 3 with multiple cards, check each suffix
+    if is_dji_mic3 and len(mic_suffixes) > 0:
+        for suffix in mic_suffixes:
+            camera_name = device.name + suffix
+            if check_merge_conflict(project_dir, shoot_date, camera_name, False, False, has_audio):
+                console.print(f"\n[{COLOR_RED}]❌ FAILSAFE: Files already exist for {camera_name} on {shoot_date}.[/{COLOR_RED}]")
+                console.print(f"[{COLOR_RED}]Merging is not supported in this version.[/{COLOR_RED}]")
+                sys.exit(1)
+    else:
+        # Single device
+        camera_name = device.name + (mic_suffixes[0] if mic_suffixes else "")
+        if check_merge_conflict(project_dir, shoot_date, camera_name, has_pics, has_vids, has_audio):
+            console.print(f"\n[{COLOR_RED}]❌ FAILSAFE: Files already exist for {camera_name} on {shoot_date}.[/{COLOR_RED}]")
+            console.print(f"[{COLOR_RED}]Merging is not supported in this version.[/{COLOR_RED}]")
+            sys.exit(1)
+    
+    # Create and display execution plan
+    mic_suffix = mic_suffixes[0] if mic_suffixes else ""
+    plan = create_execution_plan(device, output_location, project_name, project_date, 
+                                shoot_date, content_type, mic_suffix)
+    display_execution_plan(plan)
+    
+    # Confirm execution
+    if not Confirm.ask(f"[bold {COLOR_PURPLE}]Proceed with copy?[/bold {COLOR_PURPLE}]", default=True):
+        console.print(f"[{COLOR_YELLOW}]Operation cancelled.[/{COLOR_YELLOW}]")
+        sys.exit(0)
+    
+    # Create log file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = Path.cwd() / f"camera_import_{timestamp}.txt"
+    
+    # Copy files
+    console.print(f"\n[{COLOR_CYAN}]Copying files...[/{COLOR_CYAN}]\n")
+    
+    # If multiple DJI Mic 3 cards, copy each with its suffix
+    if is_dji_mic3 and len(devices) > 1:
+        for idx, dev in enumerate(devices):
+            copy_files(dev, project_dir, shoot_date, content_type, log_file, mic_suffixes[idx])
+    else:
+        copy_files(device, project_dir, shoot_date, content_type, log_file, mic_suffix)
+    
+    # Attempt to unmount SD card(s) - but not for DJI Mic 3
+    if is_dji_mic3:
+        # Don't eject DJI Mic 3 cards
+        pass
+    else:
+        unmount_sd_card(devices[0].mount_point)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+        sys.exit(0)
+    except Exception as e:
+        console.print(f"\n[red]Error: {str(e)}[/red]")
+        sys.exit(1)

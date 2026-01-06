@@ -89,7 +89,7 @@ fi
 ###########
 
 # Base alias with common options
-alias yt-base='yt-dlp --cookies-from-browser firefox --no-overwrites --output "./%(title)s.%(ext)s"'
+alias yt-base='yt-dlp --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s"'
 
 # MP3 extraction (one alias, no duplicates)
 alias yt-mp3='yt-base -x --audio-format mp3'
