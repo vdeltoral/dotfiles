@@ -156,6 +156,19 @@ def identify_camera(sd_card: Path) -> Optional[CameraDevice]:
                                   pics_path="DCIM/**/*",
                                   vids_path="DCIM/**/*")
     
+    # Check for Insta360 Ace Pro 2
+    # Detect by file marker in /DCIM/fileinfo_list.list
+    fileinfo = sd_card / "DCIM" / "fileinfo_list.list"
+    if fileinfo.exists():
+        try:
+            with open(fileinfo, 'r', encoding='utf-8', errors='replace') as f:
+                if "Insta360 Ace Pro 2" in f.read():
+                    return CameraDevice("Insta360 Ace Pro 2", sd_card,
+                        pics_path="DCIM/**/*",
+                        vids_path="DCIM/**/*")
+        except Exception:
+            pass
+
     # Skeletons for future implementation
     # TODO: iPhone 17 Pro detection
     # TODO: Insta360 X4 detection
