@@ -200,6 +200,12 @@ pathappend $PYENV_ROOT/bin
 eval "$(pyenv init --path)"
 eval "$(pyenv init - zsh)"
 
+pip-upgrade-all() {
+  python3 -m pip list --outdated --format=json \
+  | python3 -c 'import json,sys; print("\n".join(p["name"] for p in json.load(sys.stdin)))' \
+  | xargs -n1 python3 -m pip install -U
+}
+
 
 ########################################################################
 # MAN PAGES
