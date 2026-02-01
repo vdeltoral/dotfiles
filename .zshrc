@@ -89,10 +89,10 @@ fi
 ###########
 
 # Base alias with common options
-alias yt-base='yt-dlp --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s"'
+alias yt-base='yt-dlp --js-runtimes deno --remote-components ejs:github --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s"'
 
 # MP3 extraction (one alias, no duplicates)
-alias yt-mp3='yt-base -x --audio-format mp3'
+alias yt-mp3='yt-base -f "bestaudio[ext=mp3]/bestaudio/best" -x --audio-format mp3 --audio-quality 0'
 alias mp3='yt-mp3'
 
 # MP4 downloads with different quality levels
