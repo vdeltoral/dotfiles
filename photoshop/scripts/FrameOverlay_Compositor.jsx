@@ -94,12 +94,12 @@ app.bringToFront();
             fgFiles = [fgFiles];
         }
 
-        var pctStr = prompt("Foreground scale (% of background). Default 85.", "85");
+        var pctStr = prompt("Foreground scale (% of background). Default 80.", "80");
         if (pctStr === null) return;
 
         var pct = parseFloat(pctStr);
         if (isNaN(pct) || pct <= 0 || pct > 1000) {
-            alert("Enter a valid percentage (e.g. 85).");
+            alert("Enter a valid percentage (e.g. 80).");
             return;
         }
 
@@ -178,16 +178,19 @@ app.bringToFront();
             fgFiles = [fgFiles];
         }
 
-        // Show color selection dialog
-        var selectedColor = showColorSelectionDialog();
+        // Extract prominent colors from the first image
+        var prominentColors = extractProminentColors(fgFiles[0]);
+        
+        // Show color selection dialog with grayscale + prominent colors
+        var selectedColor = showColorSelectionDialog(prominentColors);
         if (selectedColor === null) return;
 
-        var pctStr = prompt("Foreground scale (% of background). Default 85.", "85");
+        var pctStr = prompt("Foreground scale (% of background). Default 80.", "80");
         if (pctStr === null) return;
 
         var pct = parseFloat(pctStr);
         if (isNaN(pct) || pct <= 0 || pct > 1000) {
-            alert("Enter a valid percentage (e.g. 85).");
+            alert("Enter a valid percentage (e.g. 80).");
             return;
         }
 
@@ -269,7 +272,15 @@ app.bringToFront();
                 var baseName = (dot >= 0) ? fgName.substring(0, dot) : fgName;
                 var ext = (dot >= 0) ? fgName.substring(dot + 1).toLowerCase() : "png";
 
-                var colorSuffix = "_" + selectedColor.name;
+                // Suffix: _white / _black for pure colors, _HEXCODE for everything else
+                var colorSuffix;
+                if (selectedColor.r === 255 && selectedColor.g === 255 && selectedColor.b === 255) {
+                    colorSuffix = "_white";
+                } else if (selectedColor.r === 0 && selectedColor.g === 0 && selectedColor.b === 0) {
+                    colorSuffix = "_black";
+                } else {
+                    colorSuffix = "_" + rgbToHex(selectedColor.r, selectedColor.g, selectedColor.b).substring(1).toUpperCase();
+                }
                 var outFile = new File(folder.fsName + "/" + baseName + colorSuffix + "." + ext);
                 saveLikeBackground(bgDoc, outFile, ext);
 
@@ -291,7 +302,7 @@ app.bringToFront();
     }
 
     // ========== COLOR SELECTION DIALOG ==========
-    function showColorSelectionDialog() {
+    function showColorSelectionDialog(prominentColors) {
         var win = new Window("dialog", "Select Frame Color");
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
@@ -303,7 +314,18 @@ app.bringToFront();
         for (var i = 0; i <= 10; i++) {
             var value = Math.round(255 * (1 - i * 0.1));
             var hexValue = rgbToHex(value, value, value);
-            var percentLabel = (i === 0) ? "White" : (i === 10) ? "Black" : (i * 10) + "% Gray";
+            var percentLabel;
+            var colorName;
+            if (i === 0) {
+                percentLabel = "White";
+                colorName = "white";
+            } else if (i === 10) {
+                percentLabel = "Black";
+                colorName = "black";
+            } else {
+                percentLabel = (i * 10) + "% Gray";
+                colorName = hexValue.substring(1); // hex digits, no #
+            }
             
             colors.push({
                 r: value,
@@ -311,8 +333,15 @@ app.bringToFront();
                 b: value,
                 hex: hexValue,
                 label: percentLabel,
-                name: (i === 0) ? "white" : (i === 10) ? "black" : "gray" + (i * 10)
+                name: colorName
             });
+        }
+
+        // Add prominent colors from image
+        if (prominentColors && prominentColors.length > 0) {
+            for (var p = 0; p < prominentColors.length; p++) {
+                colors.push(prominentColors[p]);
+            }
         }
 
         // Create scrolling group for colors
@@ -372,6 +401,169 @@ app.bringToFront();
     }
 
     // ========== HELPER FUNCTIONS ==========
+    function extractProminentColors(imageFile) {
+        var prominentColors = [];
+        
+        try {
+            // Open the image temporarily
+            app.bringToFront();
+            var tempDoc = app.open(imageFile);
+            app.activeDocument = tempDoc;
+            
+            // Flatten to ensure we're sampling actual colors
+            if (tempDoc.layers.length > 1) {
+                tempDoc.flatten();
+            }
+            
+            // Resize to smaller size for faster sampling
+            var maxDim = 300;
+            if (tempDoc.width.value > maxDim || tempDoc.height.value > maxDim) {
+                var scale = maxDim / Math.max(tempDoc.width.value, tempDoc.height.value);
+                tempDoc.resizeImage(
+                    UnitValue(tempDoc.width.value * scale, "px"),
+                    UnitValue(tempDoc.height.value * scale, "px")
+                );
+            }
+            
+            var sampledColors = [];
+            var width = tempDoc.width.value;
+            var height = tempDoc.height.value;
+            
+            // Sample 25 random points
+            for (var i = 0; i < 25; i++) {
+                var x = Math.floor(Math.random() * (width - 2)) + 1;
+                var y = Math.floor(Math.random() * (height - 2)) + 1;
+                
+                try {
+                    var sampler = tempDoc.colorSamplers.add([x, y]);
+                    var color = {
+                        r: Math.round(sampler.color.rgb.red),
+                        g: Math.round(sampler.color.rgb.green),
+                        b: Math.round(sampler.color.rgb.blue)
+                    };
+                    sampler.remove();
+                    
+                    // Only keep colorful colors (not grays)
+                    var colorfulness = getColorfulness(color);
+                    if (colorfulness > 25) {
+                        sampledColors.push(color);
+                    }
+                } catch (e) {
+                    // Skip this sample
+                }
+            }
+            
+            // Close the temp document
+            tempDoc.close(SaveOptions.DONOTSAVECHANGES);
+            
+            // If we didn't get any colorful colors, return empty
+            if (sampledColors.length === 0) {
+                return prominentColors;
+            }
+            
+            // Cluster similar colors
+            var clusteredColors = clusterColors(sampledColors);
+            
+            // Return top 4 most prominent colors
+            var maxColors = Math.min(4, clusteredColors.length);
+            for (var c = 0; c < maxColors; c++) {
+                var col = clusteredColors[c];
+                prominentColors.push({
+                    r: col.r,
+                    g: col.g,
+                    b: col.b,
+                    hex: rgbToHex(col.r, col.g, col.b),
+                    label: "Color " + (c + 1),
+                    name: rgbToHex(col.r, col.g, col.b).substring(1) // hex digits, no #
+                });
+            }
+            
+        } catch (e) {
+            // If color extraction fails, just return empty array
+        }
+        
+        return prominentColors;
+    }
+    
+    
+    function clusterColors(colors) {
+        if (colors.length === 0) return [];
+        
+        // Simple clustering: group similar colors together
+        var clusters = [];
+        var threshold = 40; // Color distance threshold
+        
+        for (var i = 0; i < colors.length; i++) {
+            var color = colors[i];
+            var foundCluster = false;
+            
+            // Check if this color belongs to an existing cluster
+            for (var c = 0; c < clusters.length; c++) {
+                var cluster = clusters[c];
+                var dist = colorDistance(color, cluster.avgColor);
+                
+                if (dist < threshold) {
+                    // Add to this cluster
+                    cluster.colors.push(color);
+                    cluster.avgColor = averageColor(cluster.colors);
+                    foundCluster = true;
+                    break;
+                }
+            }
+            
+            // If no cluster found, create new one
+            if (!foundCluster) {
+                clusters.push({
+                    colors: [color],
+                    avgColor: color
+                });
+            }
+        }
+        
+        // Sort clusters by size (most common colors first)
+        clusters.sort(function(a, b) {
+            return b.colors.length - a.colors.length;
+        });
+        
+        // Return the average colors
+        var result = [];
+        for (var c = 0; c < clusters.length; c++) {
+            result.push(clusters[c].avgColor);
+        }
+        
+        return result;
+    }
+    
+    function getColorfulness(color) {
+        // Measure how "colorful" a color is (i.e., how far from grayscale)
+        // Returns the maximum difference between RGB channels
+        var max = Math.max(color.r, color.g, color.b);
+        var min = Math.min(color.r, color.g, color.b);
+        return max - min;
+    }
+    
+    function colorDistance(c1, c2) {
+        // Euclidean distance in RGB space
+        var dr = c1.r - c2.r;
+        var dg = c1.g - c2.g;
+        var db = c1.b - c2.b;
+        return Math.sqrt(dr * dr + dg * dg + db * db);
+    }
+    
+    function averageColor(colors) {
+        var sumR = 0, sumG = 0, sumB = 0;
+        for (var i = 0; i < colors.length; i++) {
+            sumR += colors[i].r;
+            sumG += colors[i].g;
+            sumB += colors[i].b;
+        }
+        return {
+            r: Math.round(sumR / colors.length),
+            g: Math.round(sumG / colors.length),
+            b: Math.round(sumB / colors.length)
+        };
+    }
+
     function rgbToHex(r, g, b) {
         return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
     }
@@ -382,28 +574,34 @@ app.bringToFront();
     }
 
     function showBatchSummary(processedFiles, errorFiles, totalFiles, folderPath) {
-        var message = "Batch Complete!\n\n";
-        message += "Processed: " + processedFiles.length + " of " + totalFiles + " files\n\n";
-        
-        if (processedFiles.length > 0) {
-            message += "Successfully created:\n";
-            for (var p = 0; p < Math.min(processedFiles.length, 10); p++) {
-                message += "- " + processedFiles[p] + "\n";
-            }
-            if (processedFiles.length > 10) {
-                message += "... and " + (processedFiles.length - 10) + " more\n";
-            }
-        }
-        
+        var win = new Window("dialog", "Batch Complete");
+        win.orientation = "column";
+        win.alignChildren = ["center", "top"];
+        win.spacing = 12;
+        win.margins = 24;
+
+        win.add("statictext", undefined, "Processed: " + processedFiles.length + " of " + totalFiles + " files");
+
         if (errorFiles.length > 0) {
-            message += "\nErrors:\n";
-            for (var e = 0; e < errorFiles.length; e++) {
-                message += "- " + errorFiles[e] + "\n";
-            }
+            var errText = win.add("statictext", undefined, "Errors: " + errorFiles.length, {multiline: true});
+            errText.preferredSize.width = 300;
         }
-        
-        message += "\nSaved to: " + folderPath;
-        alert(message);
+
+        var btnGroup = win.add("group");
+        btnGroup.orientation = "row";
+        btnGroup.alignChildren = ["center", "center"];
+        btnGroup.spacing = 10;
+
+        var okBtn = btnGroup.add("button", undefined, "OK");
+        okBtn.onClick = function() { win.close(); };
+
+        var openBtn = btnGroup.add("button", undefined, "Open Folder");
+        openBtn.onClick = function() {
+            Folder(folderPath).execute();
+            win.close();
+        };
+
+        win.show();
     }
 
     function placeEmbedded(fileObj) {
