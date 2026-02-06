@@ -89,7 +89,7 @@ fi
 ###########
 
 # Base alias with common options
-alias yt-base='yt-dlp --js-runtimes deno --remote-components ejs:github --cookies-from-browser firefox --no-overwrites --output "~/Downloads/%(title)s.%(ext)s"'
+alias yt-base='yt-dlp --js-runtimes deno --remote-components ejs:github --cookies-from-browser firefox --no-overwrites --output "${HOME}/Downloads/%(title)s.%(ext)s"'
 
 # MP3 extraction (one alias, no duplicates)
 alias yt-mp3='yt-base -f "bestaudio[ext=mp3]/bestaudio/best" -x --audio-format mp3 --audio-quality 0'
@@ -161,10 +161,10 @@ export EDITOR='nano'
 # Display non-0 exit codes
 # https://zenbro.github.io/2015/07/23/show-exit-code-of-last-command-in-zsh.html
 check_last_exit_code() {
-    local LAST_EXIT_CODE=$?
-    if [[ ${LAST_EXIT_CODE} -ne 0 ]]; then
+    local last_exit_code=$?
+    if [[ ${last_exit_code} -ne 0 ]]; then
         local EXIT_CODE_PROMPT=' '
-        EXIT_CODE_PROMPT+="%F{red}[$LAST_EXIT_CODE]%f"
+        EXIT_CODE_PROMPT+="%F{red}[$last_exit_code]%f"
 
         echo ${EXIT_CODE_PROMPT}
     fi
@@ -305,6 +305,59 @@ docker_nuke() {
 }
 
 alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrink'
+
+
+########################################################################
+# CONTENT SYMLINK
+########################################################################
+
+
+# Function to switch ContentLink
+content_link() {
+    local target
+    
+    if [ -z "$1" ]; then
+        # No argument - default to internal
+        target="$HOME/Content"
+        echo "Switching to internal Content..."
+    else
+        # Argument provided - point to external drive
+        target="/Volumes/$1/Content"
+        
+        # Check if the target exists
+        if [ ! -d "$target" ]; then
+            echo "Error: $target does not exist"
+            return 1
+        fi
+    fi
+    
+    # Remove old symlink if it exists
+    [ -L "$HOME/ContentLink" ] && rm "$HOME/ContentLink"
+    
+    # Create new symlink
+    ln -s "$target" "$HOME/ContentLink"
+    echo "ContentLink now points to: $target"
+}
+
+# Tab completion function
+_content_link_completion() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local drives=""
+    
+    # Get all mounted volumes and extract drive names
+    if [ -d "/Volumes" ]; then
+        for drive in /Volumes/*; do
+            if [ -d "$drive" ] && [ -d "$drive/Content" ]; then
+                drives="$drives $(basename "$drive")"
+            fi
+        done
+    fi
+    
+    COMPREPLY=($(compgen -W "$drives" -- "$cur"))
+}
+
+# Register the completion
+complete -F _content_link_completion content_link
 
 ########################################################################
 # OUTSIDE OF VERSION CONTROL
