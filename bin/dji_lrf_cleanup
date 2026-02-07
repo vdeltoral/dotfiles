@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""
+Script to delete DJI .LRF files that have corresponding .MP4 files.
+Only deletes .LRF files if an .MP4 file with the exact same base name exists.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+
+def human_readable_size(size_bytes):
+    """Convert bytes to human-readable format."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} PB"
+
+
+def find_and_cleanup_lrf_files(start_directory='.', dry_run=True):
+    """
+    Find all DJI_*.LRF files and delete them if corresponding .MP4 exists.
+    
+    Args:
+        start_directory: Directory to start search from (default: current directory)
+        dry_run: If True, only print what would be deleted without actually deleting
+    """
+    start_path = Path(start_directory).resolve()
+    
+    if not start_path.exists():
+        print(f"Error: Directory '{start_directory}' does not exist.")
+        return
+    
+    print(f"Searching for DJI_*.LRF files in: {start_path}")
+    print(f"Mode: {'DRY RUN (no files will be deleted)' if dry_run else 'LIVE (files will be deleted)'}")
+    print("-" * 70)
+    
+    # Find all .LRF files that start with DJI_
+    lrf_files = list(start_path.rglob('DJI_*.LRF'))
+    
+    if not lrf_files:
+        print("No DJI_*.LRF files found.")
+        return
+    
+    print(f"Found {len(lrf_files)} DJI_*.LRF file(s)\n")
+    
+    deleted_count = 0
+    kept_count = 0
+    deleted_bytes = 0
+    kept_bytes = 0
+    
+    for lrf_file in lrf_files:
+        # Get file size
+        try:
+            file_size = lrf_file.stat().st_size
+        except Exception as e:
+            print(f"! Error getting size for {lrf_file}: {e}")
+            continue
+        
+        # Construct the corresponding .MP4 filename
+        mp4_file = lrf_file.with_suffix('.MP4')
+        
+        if mp4_file.exists():
+            # Corresponding .MP4 exists, delete the .LRF
+            print(f"✓ Found pair: {lrf_file.name}")
+            print(f"  → MP4 exists: {mp4_file.name}")
+            print(f"  → Size: {human_readable_size(file_size)}")
+            
+            if dry_run:
+                print(f"  → Would delete: {lrf_file}")
+            else:
+                try:
+                    lrf_file.unlink()
+                    print(f"  → DELETED: {lrf_file}")
+                except Exception as e:
+                    print(f"  → ERROR deleting {lrf_file}: {e}")
+                    continue
+            
+            deleted_count += 1
+            deleted_bytes += file_size
+            print()
+        else:
+            # No corresponding .MP4, keep the .LRF
+            print(f"✗ No MP4 pair: {lrf_file.name}")
+            print(f"  → Keeping: {lrf_file}")
+            print(f"  → Size: {human_readable_size(file_size)}")
+            print()
+            kept_count += 1
+            kept_bytes += file_size
+    
+    print("-" * 70)
+    print(f"Summary:")
+    print(f"  Files {'that would be' if dry_run else ''} deleted: {deleted_count}")
+    print(f"  Storage {'that would be' if dry_run else ''} freed: {human_readable_size(deleted_bytes)}")
+    print(f"  Files kept: {kept_count}")
+    print(f"  Storage kept: {human_readable_size(kept_bytes)}")
+    
+    if dry_run and deleted_count > 0:
+        print(f"\nTo actually delete files, run with --execute flag")
+
+
+def main():
+    """Main entry point for the script."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='Delete DJI .LRF files that have corresponding .MP4 files',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Dry run in current directory (safe, shows what would happen)
+  python3 cleanup_lrf_files.py
+  
+  # Dry run in specific directory
+  python3 cleanup_lrf_files.py /path/to/drone/footage
+  
+  # Actually delete files in current directory
+  python3 cleanup_lrf_files.py --execute
+  
+  # Actually delete files in specific directory
+  python3 cleanup_lrf_files.py /path/to/drone/footage --execute
+        """
+    )
+    
+    parser.add_argument(
+        'directory',
+        nargs='?',
+        default='.',
+        help='Directory to search (default: current directory)'
+    )
+    
+    parser.add_argument(
+        '--execute',
+        action='store_true',
+        help='Actually delete files (default is dry-run mode)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Run the cleanup
+    find_and_cleanup_lrf_files(
+        start_directory=args.directory,
+        dry_run=not args.execute
+    )
+
+
+if __name__ == '__main__':
+    main()
