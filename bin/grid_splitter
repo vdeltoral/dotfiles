@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+grid_splitter.py — Split a character reference sheet into individual panels.
+
+Usage:
+  python grid_splitter.py image.jpg 3x3           # even split
+  python grid_splitter.py image.jpg 3x3 --smart   # cut at actual gaps between items
+  python grid_splitter.py image.jpg 3x3 --smart --output ./panels --prefix items
+"""
+
+import argparse
+import sys
+from pathlib import Path
+from PIL import Image
+import numpy as np
+
+
+def find_cut_points(brightness_1d, n_cuts, total_size):
+    """
+    Find n_cuts interior gap centers in a brightness profile.
+    Gaps are bright bands (background) between content.
+    Returns sorted list of n_cuts pixel positions to cut at.
+    """
+    bg = brightness_1d.max()
+    thresh = bg * 0.97
+
+    # Find all bright bands (gaps), excluding borders
+    border_tol = max(20, total_size // 50)
+    run_start = None
+    bands = []
+    for i, v in enumerate(brightness_1d):
+        if v >= thresh:
+            if run_start is None:
+                run_start = i
+        else:
+            if run_start is not None:
+                bands.append((run_start, i - 1))
+                run_start = None
+    if run_start is not None:
+        bands.append((run_start, total_size - 1))
+
+    interior = [(s, e) for s, e in bands
+                if s > border_tol and e < total_size - 1 - border_tol]
+
+    # Merge bands that are very close together (within 30px)
+    merged = []
+    for band in interior:
+        if merged and band[0] - merged[-1][1] <= 30:
+            merged[-1] = (merged[-1][0], band[1])
+        else:
+            merged.append(list(band))
+
+    if len(merged) < n_cuts:
+        print(f"  Warning: expected {n_cuts} interior gaps but only found {len(merged)}. "
+              f"Falling back to even split for this axis.")
+        step = total_size // (n_cuts + 1)
+        return [step * (i + 1) for i in range(n_cuts)]
+
+    # If more bands than needed, take the n_cuts widest ones
+    if len(merged) > n_cuts:
+        merged = sorted(merged, key=lambda b: b[1] - b[0], reverse=True)[:n_cuts]
+        merged = sorted(merged, key=lambda b: b[0])
+
+    return [(s + e) // 2 for s, e in merged]
+
+
+def split_grid(image_path, grid, smart=False, output_dir=None, prefix=None):
+    img_path = Path(image_path)
+    if not img_path.exists():
+        print(f"Error: File not found: {image_path}")
+        sys.exit(1)
+
+    parts = grid.lower().split("x")
+    if len(parts) != 2:
+        print("Error: grid must be in format COLSxROWS, e.g. 3x3")
+        sys.exit(1)
+    cols, rows = int(parts[0]), int(parts[1])
+
+    img = Image.open(img_path)
+    w, h = img.size
+    print(f"Loaded: {img_path.name}  ({w} x {h} px)")
+    print(f"Grid: {cols} cols x {rows} rows → {cols * rows} panels")
+
+    if smart:
+        print("Mode: smart (cutting at detected gaps)")
+        gray = np.array(img.convert("L"), dtype=np.float32)
+        row_cuts = [0] + find_cut_points(gray.mean(axis=1), rows - 1, h) + [h]
+        col_cuts = [0] + find_cut_points(gray.mean(axis=0), cols - 1, w) + [w]
+    else:
+        print("Mode: even split")
+        panel_h = h // rows
+        panel_w = w // cols
+        row_cuts = [i * panel_h for i in range(rows)] + [h]
+        col_cuts = [i * panel_w for i in range(cols)] + [w]
+
+    out_dir = Path(output_dir) if output_dir else Path.cwd() / f"{img_path.stem}_panels"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pfx = prefix if prefix else img_path.stem
+
+    for row in range(rows):
+        for col in range(cols):
+            panel = img.crop((col_cuts[col], row_cuts[row], col_cuts[col + 1], row_cuts[row + 1]))
+            out_path = out_dir / f"{pfx}_r{row+1}c{col+1}{img_path.suffix}"
+            panel.save(out_path)
+            print(f"  Saved: {out_path}")
+
+    print(f"\nDone! {cols * rows} panels saved to: {out_dir}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Split a grid reference sheet into individual panels.")
+    parser.add_argument("image", help="Path to the input image")
+    parser.add_argument("grid", help="Grid size as COLSxROWS, e.g. 3x3")
+    parser.add_argument("--smart", action="store_true", help="Cut at detected background gaps instead of evenly")
+    parser.add_argument("--output", help="Output directory (default: ./<image_name>_panels/)")
+    parser.add_argument("--prefix", help="Filename prefix for panels (default: image stem)")
+    args = parser.parse_args()
+
+    split_grid(args.image, args.grid, smart=args.smart, output_dir=args.output, prefix=args.prefix)

@@ -79,6 +79,8 @@ else
     alias ll='ls -la --color=auto'
 fi
 
+export CLICOLOR=1
+
 # Machine-specific
 [ "$IS_MACOS" = true ] && alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
 [ "$IS_MACOS" = true ] && export DISPLAY='localhost:0'
