@@ -13,6 +13,7 @@ case "$(uname -n)" in
     VDT-*)   COMPUTER_LOGO="" ;;
     PI-GP)   IS_PI=true; COMPUTER_LOGO="π" ;;
     PI-NELSON) IS_PI=true; COMPUTER_LOGO="π2" ;;
+    gbox)    COMPUTER_LOGO="☁" ;;
     *)       echo "Unknown computer: $(uname -n)" ;;
 esac
 
@@ -25,6 +26,11 @@ export ZSH="${HOME}/.oh-my-zsh"
 ZSH_THEME="agnoster"
 
 plugins=(git ssh-agent)
+
+# On Linux, auto-load all private keys in ~/.ssh
+if [ "$IS_LINUX" = true ]; then
+  zstyle :omz:plugins:ssh-agent identities $(find ~/.ssh -name "*.pub" -exec basename {} .pub \; 2>/dev/null)
+fi
 
 fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 
