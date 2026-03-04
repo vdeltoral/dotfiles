@@ -198,15 +198,22 @@ fi
 command -v direnv >/dev/null && eval "$(direnv hook zsh)"
 export DIRENV_LOG_FORMAT="" # remove chatter
 
+command -v python >/dev/null || alias python='python3'
+
 alias pyr='find . -type d -name __pycache__ -prune | xargs rm -rf; find . -name "*.pyc" | xargs rm -f;' # removes .pyc files and __pycache__ folders
 
 alias make_python_env='python -m venv .venv && echo "source .venv/bin/activate" > .envrc && direnv allow'
 alias venv='[[ -f ./.venv/bin/activate ]] && source ./.venv/bin/activate'
 
 
-pathappend $PYENV_ROOT/bin
-eval "$(pyenv init --path)"
-eval "$(pyenv init - zsh)"
+export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
+if [ -d "$PYENV_ROOT/bin" ]; then
+  pathappend "$PYENV_ROOT/bin"
+fi
+if command -v pyenv >/dev/null; then
+  eval "$(pyenv init --path)"
+  eval "$(pyenv init - zsh)"
+fi
 
 pip-upgrade-all() {
   python3 -m pip list --outdated --format=json \
