@@ -6,15 +6,38 @@ if ! command -v stow &> /dev/null; then
   exit 1
 fi
 
-# Get the directory of the install.sh script
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Determine if this is a dry run or actual run
-if [[ "$1" == "run" ]]; then
-  stow -d "$SCRIPT_DIR" -t "$HOME" .
-elif [[ "$1" == "force" ]]; then
-  stow --adopt -d "$SCRIPT_DIR" -t "$HOME" .
-else
-  stow -n -v -d "$SCRIPT_DIR" -t "$HOME" .
-  echo "Dry run mode (no changes made). Run './install.sh run' to run normally or './install.sh force' to overwrite files."
+# Detect platform
+case "$OSTYPE" in
+  darwin*) PLATFORM="macos" ;;
+  linux*)  PLATFORM="linux" ;;
+  *)
+    echo "Error: Unsupported OS type '$OSTYPE'. Only macOS and Linux are supported."
+    exit 1
+    ;;
+esac
+
+# Stow a package with the given mode
+stow_package() {
+  local pkg="$1"
+  case "${MODE}" in
+    run)   stow -d "$SCRIPT_DIR" -t "$HOME" "$pkg" ;;
+    force) stow --adopt -d "$SCRIPT_DIR" -t "$HOME" "$pkg" ;;
+    *)     stow -n -v -d "$SCRIPT_DIR" -t "$HOME" "$pkg" ;;
+  esac
+}
+
+MODE="$1"
+
+# Always stow common
+stow_package common
+
+# Platform-specific
+if [[ "$PLATFORM" == "macos" ]]; then
+  stow_package macos
+fi
+
+if [[ "$MODE" != "run" && "$MODE" != "force" ]]; then
+  echo "Dry run mode (no changes made). Run './run_stow.sh run' to run normally or './run_stow.sh force' to overwrite files."
 fi
