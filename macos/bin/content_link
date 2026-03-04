@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Switch the ~/ContentLink symlink to internal storage or an external drive
+
+target=""
+
+if [ -z "$1" ]; then
+    target="$HOME/Content"
+    echo "Switching to internal Content..."
+else
+    target="/Volumes/$1/Content"
+
+    if [ ! -d "$target" ]; then
+        echo "Error: $target does not exist"
+        exit 1
+    fi
+fi
+
+# Remove old symlink if it exists
+[ -L "$HOME/ContentLink" ] && rm "$HOME/ContentLink"
+
+# Create new symlink
+ln -s "$target" "$HOME/ContentLink"
+echo "ContentLink now points to: $target"

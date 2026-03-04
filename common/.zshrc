@@ -310,56 +310,20 @@ alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrin
 
 
 ########################################################################
-# CONTENT SYMLINK
+# CONTENT SYMLINK (macOS only)
 ########################################################################
 
-
-# Function to switch ContentLink
-content_link() {
-    local target
-    
-    if [ -z "$1" ]; then
-        # No argument - default to internal
-        target="$HOME/Content"
-        echo "Switching to internal Content..."
-    else
-        # Argument provided - point to external drive
-        target="/Volumes/$1/Content"
-        
-        # Check if the target exists
-        if [ ! -d "$target" ]; then
-            echo "Error: $target does not exist"
-            return 1
-        fi
-    fi
-    
-    # Remove old symlink if it exists
-    [ -L "$HOME/ContentLink" ] && rm "$HOME/ContentLink"
-    
-    # Create new symlink
-    ln -s "$target" "$HOME/ContentLink"
-    echo "ContentLink now points to: $target"
-}
-
-# Tab completion function
-_content_link_completion() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    local drives=""
-    
-    # Get all mounted volumes and extract drive names
-    if [ -d "/Volumes" ]; then
-        for drive in /Volumes/*; do
-            if [ -d "$drive" ] && [ -d "$drive/Content" ]; then
-                drives="$drives $(basename "$drive")"
-            fi
-        done
-    fi
-    
-    COMPREPLY=($(compgen -W "$drives" -- "$cur"))
-}
-
-# Register the completion
-complete -F _content_link_completion content_link
+if [ "$IS_MACOS" = true ]; then
+  # Zsh completion for content_link (lists external drives with a Content folder)
+  _content_link() {
+    local drives=()
+    for drive in /Volumes/*(N/); do
+      [ -d "$drive/Content" ] && drives+=("$(basename "$drive")")
+    done
+    compadd -a drives
+  }
+  compdef _content_link content_link
+fi
 
 ########################################################################
 # OUTSIDE OF VERSION CONTROL
