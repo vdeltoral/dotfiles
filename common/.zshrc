@@ -13,7 +13,7 @@ case "$(uname -n)" in
     VDT-*)   COMPUTER_LOGO="" ;;
     PI-GP)   IS_PI=true; COMPUTER_LOGO="π" ;;
     PI-NELSON) IS_PI=true; COMPUTER_LOGO="π2" ;;
-    gbox)    COMPUTER_LOGO="☁" ;;
+    gbox)    COMPUTER_LOGO="GBOX" ;;
     *)       echo "Unknown computer: $(uname -n)" ;;
 esac
 
