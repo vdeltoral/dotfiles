@@ -264,6 +264,7 @@ alias tmuxrsb='tmux kill-server 2>/dev/null; create_tmux_sessions; tmux attach-s
 alias tmuxrsc='tmux kill-server 2>/dev/null; create_tmux_sessions; tmux attach-session -t THREE'
 alias tma='create_session ONE; tmux attach-session -t ONE'
 alias tmb='create_session TWO; tmux attach-session -t TWO'
+alias tmc='create_session THREE; tmux attach-session -t THREE'
 
 ########################################################################
 # GIT
