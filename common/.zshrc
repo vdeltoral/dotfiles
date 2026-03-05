@@ -73,6 +73,8 @@ alias myip='curl -4 -s https://api64.ipify.org; echo'
 alias myip-local='ip -4 addr show | awk "/inet / {print \$2}" | cut -d/ -f1 | tail -n 1'
 alias neofetch='fastfetch'
 alias list-scripts='ls -1 ~/bin/'
+alias claudes='claude --model claude-sonnet-4-6'
+alias claudeo='claude --model claude-opus-4-6'
 
 # disables TLDR updating almost every time it's run
 export TLDR_AUTO_UPDATE_DISABLED='true'
@@ -89,6 +91,7 @@ export CLICOLOR=1
 
 # Machine-specific
 [ "$IS_MACOS" = true ] && alias brewup='brew update; brew upgrade; brew cleanup; brew doctor'
+[ "$IS_MACOS" = true ] && alias sc='open ~/Pictures/screenshots'
 [ "$IS_MACOS" = true ] && export DISPLAY='localhost:0'
 [ -f "/var/mail/${USER}" ] && alias mymail='tail /var/mail/${USER}'
 
