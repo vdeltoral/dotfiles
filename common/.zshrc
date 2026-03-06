@@ -11,8 +11,6 @@ esac
 
 case "$(uname -n)" in
     VDT-*)   COMPUTER_LOGO="" ;;
-    PI-GP)   IS_PI=true; COMPUTER_LOGO="π" ;;
-    PI-NELSON) IS_PI=true; COMPUTER_LOGO="π2" ;;
     gbox)    COMPUTER_LOGO="GBOX" ;;
     *)       echo "Unknown computer: $(uname -n)" ;;
 esac
@@ -51,10 +49,14 @@ alias cl='clear '
 alias empty='echo > '
 alias ff='find . -name ' # find file by name
 alias hg='history | grep ' # searches history
-alias ld='ll | grep "^d" | cut -d ":" -f 2 | cut -c 1-3 --complement | grep -v -e "^\.$" -e "^\.\.$"' # ls directories only
+alias ld='ls -lp | grep "^d"' # ls directories only
 alias lh='ll -d .?* ' # ls only hidden '.' files
 alias ll='ls -laG --color=auto '
-alias perms='stat -c "%U %a %n" ' # gets octal permissions for
+if [ "$IS_LINUX" = true ]; then
+    alias perms='stat -c "%U %a %n" '
+elif [ "$IS_MACOS" = true ]; then
+    alias perms='stat -f "%Su %A %N" '
+fi
 alias sudo='sudo ' #allows sudoing of aliases
 alias sz='source ${HOME}/.zshrc' #reload .zshrc
 alias t='tree -C ' # quick tree
@@ -62,7 +64,6 @@ alias ti='treei '
 alias treei='tree -C -I "node_modules|__pycache__|lib|venv|soapfish|*~|*#|*.pyc" '
 alias watchf="watch -t -d -n 1 'ls ${1} 2> /dev/null'" # Watches for changes in files. If using *, make sure to put arg in quotes.
 alias watchft="watch -t -d -n 1 'date; ls ${1} 2>/dev/null'" # watchf with time included
-alias igreel='yt-dlp --cookies-from-browser firefox --no-overwrites -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"'
 alias foldersize='du -sh '
 alias s='subl '
 alias sl='subl '
@@ -293,6 +294,8 @@ git_touched() {
 # DOCKER
 ########################################################################
 
+if command -v docker >/dev/null 2>&1; then
+
 dbash() {
     # If exact container name matches, exec in
     # Else use it as container name for docker-compose
@@ -317,6 +320,8 @@ docker_nuke() {
 }
 
 alias pishrink='docker run -it --rm --privileged=true -v $(pwd):/workdir pishrink'
+
+fi # docker
 
 
 ########################################################################
