@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # Default values
-SEARCH_PATH="$HOME/Content/2025"
+SEARCH_PATH="$HOME/Content/$(date +%Y)"
 VERBOSE=false
 DRY_RUN=false
 EXPLORE_MODE=false

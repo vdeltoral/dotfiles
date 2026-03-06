@@ -6,7 +6,7 @@ import argparse
 
 def download_video(url, prefix, audio_only, resolution):
     if prefix:
-        output = '' + prefix + '-' '%(title)s.%(ext)s'
+        output = prefix + '-%(title)s.%(ext)s'
     else:
         output = '%(title)s.%(ext)s'
     

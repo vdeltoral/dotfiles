@@ -7,18 +7,34 @@ import sys
 
 git_ssh_url = subprocess.run(
     "git config --get remote.origin.url", shell=True, capture_output=True
-).stdout.decode("utf-8")
-url_repo = re.match(r"git@.+:(?P<repo>.+).git$", git_ssh_url).group("repo")
+).stdout.decode("utf-8").strip()
+
+# Support both SSH (git@...:repo.git) and HTTPS (https://github.com/repo.git) remotes
+match = re.match(r"git@.+:(?P<repo>.+?)(?:\.git)?$", git_ssh_url) or \
+        re.match(r"https?://.+?/(?P<repo>.+?)(?:\.git)?$", git_ssh_url)
+
+if not match:
+    print(f"Error: Could not parse remote URL: {git_ssh_url}", file=sys.stderr)
+    sys.exit(1)
+
+url_repo = match.group("repo")
+
+# Detect default branch
+default_branch = subprocess.run(
+    "git symbolic-ref refs/remotes/origin/HEAD", shell=True, capture_output=True
+).stdout.decode("utf-8").strip().replace("refs/remotes/origin/", "")
+if not default_branch:
+    default_branch = "main"
 
 git_root_dir = subprocess.run(
     "git rev-parse --show-toplevel", shell=True, capture_output=True
-).stdout.decode("utf-8")
+).stdout.decode("utf-8").strip()
 
-url_path = os.getcwd()[len(git_root_dir) :]
+url_path = os.getcwd()[len(git_root_dir):]
 if len(sys.argv) > 1:
     url_path = os.path.join(url_path, sys.argv[1])
 
 if url_path:
-    print(f"https://github.com/{url_repo}/blob/master/{url_path}")
+    print(f"https://github.com/{url_repo}/blob/{default_branch}/{url_path}")
 else:
     print(f"https://github.com/{url_repo}")
