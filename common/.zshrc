@@ -215,8 +215,12 @@ if [ -d "$PYENV_ROOT/bin" ]; then
   pathappend "$PYENV_ROOT/bin"
 fi
 if command -v pyenv >/dev/null; then
-  eval "$(pyenv init --path)"
-  eval "$(pyenv init - zsh)"
+  pyenv() {
+    unfunction pyenv
+    eval "$(command pyenv init --path)"
+    eval "$(command pyenv init - zsh)"
+    pyenv "$@"
+  }
 fi
 
 pip-upgrade-all() {
